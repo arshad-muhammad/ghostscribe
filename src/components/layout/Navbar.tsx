@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Ghost, Menu, X, User, LogOut } from 'lucide-react';
+import { Ghost, Menu, X } from 'lucide-react';
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
 import { Button } from '../ui/Button';
-import { useAuthStore } from '../../store/authStore';
 
 export const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
-  const { isAuthenticated, user, logout } = useAuthStore();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
-  };
-
-  const toggleProfile = () => {
-    setIsProfileOpen(!isProfileOpen);
   };
 
   const navLinks = [
@@ -55,63 +49,23 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
           <div className="hidden sm:ml-6 sm:flex sm:items-center">
-            {isAuthenticated ? (
-              <div className="relative">
-                <button
-                  onClick={toggleProfile}
-                  className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none"
-                >
-                  {user?.avatar ? (
-                    <img
-                      className="h-8 w-8 rounded-full"
-                      src={user.avatar}
-                      alt={user.name}
-                    />
-                  ) : (
-                    <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
-                      <User className="h-4 w-4 text-primary-600" />
-                    </div>
-                  )}
-                  <span>{user?.name}</span>
-                </button>
-                {isProfileOpen && (
-                  <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-10">
-                    <Link
-                      to="/dashboard"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={() => setIsProfileOpen(false)}
-                    >
-                      Dashboard
-                    </Link>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setIsProfileOpen(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      <div className="flex items-center">
-                        <LogOut className="h-4 w-4 mr-2" />
-                        <span>Sign out</span>
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
+            <SignedOut>
               <div className="flex space-x-4">
-                <Link to="/login">
+                <SignInButton mode="modal">
                   <Button variant="outline" size="md">
                     Log in
                   </Button>
-                </Link>
-                <Link to="/register">
+                </SignInButton>
+                <SignUpButton mode="modal">
                   <Button variant="primary" size="md">
                     Sign up
                   </Button>
-                </Link>
+                </SignUpButton>
               </div>
-            )}
+            </SignedOut>
+            <SignedIn>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
           </div>
           <div className="flex items-center sm:hidden">
             <button
@@ -149,62 +103,25 @@ export const Navbar: React.FC = () => {
             ))}
           </div>
           <div className="pt-4 pb-3 border-t border-gray-200">
-            {isAuthenticated ? (
-              <>
-                <div className="flex items-center px-4">
-                  {user?.avatar ? (
-                    <img
-                      className="h-10 w-10 rounded-full"
-                      src={user.avatar}
-                      alt={user.name}
-                    />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
-                      <User className="h-5 w-5 text-primary-600" />
-                    </div>
-                  )}
-                  <div className="ml-3">
-                    <div className="text-base font-medium text-gray-800">{user?.name}</div>
-                    <div className="text-sm font-medium text-gray-500">{user?.email}</div>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-1">
-                  <Link
-                    to="/dashboard"
-                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Dashboard
-                  </Link>
-                  <button
-                    onClick={() => {
-                      logout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              </>
-            ) : (
+            <SignedOut>
               <div className="mt-3 space-y-1 px-4">
-                <Link
-                  to="/login"
-                  className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Log in
-                </Link>
-                <Link
-                  to="/register"
-                  className="block px-4 py-2 text-base font-medium text-primary-600 hover:text-primary-800 hover:bg-gray-100"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sign up
-                </Link>
+                <SignInButton mode="modal">
+                  <Button variant="outline" size="md" className="w-full">
+                    Log in
+                  </Button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <Button variant="primary" size="md" className="w-full mt-2">
+                    Sign up
+                  </Button>
+                </SignUpButton>
               </div>
-            )}
+            </SignedOut>
+            <SignedIn>
+              <div className="flex items-center justify-center py-4">
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
           </div>
         </div>
       )}

@@ -1,40 +1,74 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { pricingPlans } from '../data/pricing';
 import { Button } from '../components/ui/Button';
-import { Check, X } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { Check, X, Crown } from 'lucide-react';
+import { useAuth, SignUpButton } from '@clerk/clerk-react';
 import { useUserPlanStore } from '../store/userPlanStore';
 import { PlanType } from '../types';
+import { createCheckoutSession, cancelSubscription } from '../utils/stripe';
+import { toast } from 'sonner';
 
 const PricingPage: React.FC = () => {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annually'>('monthly');
-  const { isAuthenticated } = useAuthStore();
+  const { isSignedIn, isLoaded } = useAuth();
   const { userPlan, updatePlan } = useUserPlanStore();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSelectPlan = (planType: PlanType) => {
-    if (isAuthenticated) {
-      updatePlan(planType);
-      // In a real app, this would trigger a payment flow for paid plans
+  const handleSelectPlan = async (planType: PlanType) => {
+    if (!isSignedIn) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (planType === 'free' && userPlan.plan === 'pro') {
+        // Handle downgrade to free
+        await cancelSubscription();
+        updatePlan('free');
+        toast.success('Successfully downgraded to free plan');
+      } else if (planType === 'pro') {
+        // Handle upgrade to pro
+        await createCheckoutSession(planType, billingPeriod);
+      }
+    } catch (error) {
+      console.error('Error handling plan selection:', error);
+      toast.error('Failed to process plan selection');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getButtonText = (planType: PlanType) => {
-    if (!isAuthenticated) {
+    if (!isSignedIn) {
       return planType === 'free' ? 'Start Free' : 'Sign Up';
     }
     
     if (userPlan.plan === planType) {
-      return 'Current Plan';
+      return planType === 'pro' ? 'Cancel Subscription' : 'Current Plan';
     }
     
     return planType === 'free' ? 'Downgrade' : 'Upgrade';
   };
 
+  // Wait for Clerk to load
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-display font-bold text-gray-900">Pricing Plans</h1>
+        {userPlan.plan === 'pro' && (
+          <div className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white px-4 py-2 rounded-full">
+            <Crown className="h-5 w-5" />
+            <span className="font-medium">Pro User</span>
+          </div>
+        )}
         <p className="mt-4 text-xl text-gray-600 max-w-3xl mx-auto">
           Choose the perfect plan for your content humanization needs
         </p>
@@ -65,7 +99,7 @@ const PricingPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
         {pricingPlans.map((plan) => (
           <div 
             key={plan.type}
@@ -97,24 +131,24 @@ const PricingPage: React.FC = () => {
               )}
               
               <div className="mt-6">
-                {isAuthenticated ? (
+                {isSignedIn ? (
                   <Button
                     variant={plan.recommended ? 'primary' : userPlan.plan === plan.type ? 'outline' : 'secondary'}
                     fullWidth
-                    disabled={userPlan.plan === plan.type}
+                    disabled={isLoading || (userPlan.plan === plan.type && plan.type === 'free')}
                     onClick={() => handleSelectPlan(plan.type)}
                   >
-                    {getButtonText(plan.type)}
+                    {isLoading ? 'Processing...' : getButtonText(plan.type)}
                   </Button>
                 ) : (
-                  <Link to="/register">
+                  <SignUpButton mode="modal">
                     <Button
                       variant={plan.recommended ? 'primary' : 'secondary'}
                       fullWidth
                     >
                       {plan.type === 'free' ? 'Start Free' : 'Sign Up'}
                     </Button>
-                  </Link>
+                  </SignUpButton>
                 )}
               </div>
             </div>

@@ -1,75 +1,52 @@
-import { PricingPlan } from '../types';
+import { PlanType } from '../types';
+
+export interface PricingPlan {
+  type: PlanType;
+  name: string;
+  description: string;
+  price: number;
+  features: string[];
+  models: string[];
+  recommended?: boolean;
+  limits: {
+    wordsPerDay: number;
+    wordsPerRequest: number;
+  };
+  stripePriceId: {
+    monthly: string;
+    annually: string;
+  };
+}
 
 export const pricingPlans: PricingPlan[] = [
   {
-    name: 'Free',
     type: 'free',
+    name: 'Free',
+    description: 'Basic content humanization',
     price: 0,
-    billing: 'monthly',
-    description: 'For occasional content rewriting needs',
-    wordsPerDay: 1000,
-    maxWordsPerRequest: 500,
     features: [
       'Basic content humanization',
-      'Ninja model access',
       'Limited to 1,000 words/day',
       'Max 500 words per request',
       'Standard support'
     ],
     models: ['ninja'],
-    hasAIDetection: false
+    limits: {
+      wordsPerDay: 1000,
+      wordsPerRequest: 500
+    },
+    stripePriceId: {
+      monthly: '',
+      annually: ''
+    }
   },
   {
-    name: 'Basic',
-    type: 'basic',
-    price: 9.99,
-    billing: 'monthly',
-    description: 'For regular content creators',
-    wordsPerDay: 10000,
-    maxWordsPerRequest: 2000,
-    features: [
-      'Advanced content humanization',
-      'Ninja & Ghost models',
-      '10,000 words/day',
-      'Max 2,000 words per request',
-      'AI detection checker',
-      'Email support'
-    ],
-    models: ['ninja', 'ghost'],
-    hasAIDetection: true
-  },
-  {
-    name: 'Pro',
     type: 'pro',
-    price: 29.99,
-    billing: 'monthly',
-    description: 'For professional content teams',
-    wordsPerDay: 50000,
-    maxWordsPerRequest: 5000,
-    features: [
-      'Premium content humanization',
-      'All models (Ninja, Ghost, Generator)',
-      '50,000 words/day',
-      'Max 5,000 words per request',
-      'Advanced AI detection tools',
-      'Multi-language support',
-      'Priority support'
-    ],
-    models: ['ninja', 'ghost', 'generator'],
-    hasAIDetection: true,
-    recommended: true
-  },
-  {
-    name: 'Enterprise',
-    type: 'enterprise',
-    price: 99.99,
-    billing: 'monthly',
-    description: 'For agencies and large teams',
-    wordsPerDay: 250000,
-    maxWordsPerRequest: 10000,
+    name: 'Pro',
+    description: 'Enterprise-grade humanization',
+    price: 9.99,
     features: [
       'Enterprise-grade humanization',
-      'All models with highest quality',
       '250,000 words/day',
       'Max 10,000 words per request',
       'Premium AI detection suite',
@@ -78,6 +55,14 @@ export const pricingPlans: PricingPlan[] = [
       'Dedicated account manager'
     ],
     models: ['ninja', 'ghost', 'generator'],
-    hasAIDetection: true
+    recommended: true,
+    limits: {
+      wordsPerDay: 250000,
+      wordsPerRequest: 10000
+    },
+    stripePriceId: {
+      monthly: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_MONTHLY || '',
+      annually: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_YEARLY || ''
+    }
   }
 ];

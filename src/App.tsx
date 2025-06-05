@@ -1,11 +1,7 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-
-// Layouts
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
-
-// Pages
 import HomePage from './pages/HomePage';
 import HumanizerPage from './pages/HumanizerPage';
 import PricingPage from './pages/PricingPage';
@@ -16,7 +12,8 @@ import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
   return (
-    <Router>
+    <BrowserRouter>
+      <Toaster position="top-right" richColors />
       <div className="flex flex-col min-h-screen">
         <Navbar />
         <main className="flex-grow">
@@ -32,7 +29,7 @@ function App() {
         </main>
         <Footer />
       </div>
-    </Router>
+    </BrowserRouter>
   );
 }
 
