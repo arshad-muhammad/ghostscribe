@@ -28,11 +28,18 @@ const PricingPage: React.FC = () => {
         toast.success('Successfully downgraded to free plan');
       } else if (planType === 'pro') {
         // Handle upgrade to pro
-        await createCheckoutSession(planType, billingPeriod);
+        const result = await createCheckoutSession(planType, billingPeriod);
+        if (!result) {
+          throw new Error('Failed to create checkout session');
+        }
       }
     } catch (error) {
       console.error('Error handling plan selection:', error);
-      toast.error('Failed to process plan selection');
+      if (error instanceof Error) {
+        toast.error(`Failed to process plan selection: ${error.message}`);
+      } else {
+        toast.error('Failed to process plan selection');
+      }
     } finally {
       setIsLoading(false);
     }
