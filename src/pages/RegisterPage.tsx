@@ -24,9 +24,9 @@ const RegisterPage: React.FC = () => {
           navigate('/pricing');
         }
       } else if (isAuthenticated) {
-        navigate('/dashboard');
-      }
-    };
+      navigate('/dashboard');
+    }
+  };
 
     handleRegistrationComplete();
   }, [isAuthenticated, searchParams, navigate]);

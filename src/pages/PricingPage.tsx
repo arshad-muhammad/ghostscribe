@@ -1,37 +1,114 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { pricingPlans } from '../data/pricing';
 import { Button } from '../components/ui/Button';
 import { Check, X, Crown } from 'lucide-react';
-import { useAuth, SignUpButton } from '@clerk/clerk-react';
+import { useAuth, SignUpButton, useUser } from '@clerk/clerk-react';
 import { useUserPlanStore } from '../store/userPlanStore';
 import { PlanType } from '../types';
 import { createCheckoutSession, cancelSubscription } from '../utils/stripe';
 import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
 
 const PricingPage: React.FC = () => {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annually'>('monthly');
-  const { isSignedIn, isLoaded } = useAuth();
-  const { userPlan, updatePlan } = useUserPlanStore();
+  const { isSignedIn, isLoaded, userId } = useAuth();
+  const { user } = useUser();
+  const { plan, syncWithClerk } = useUserPlanStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  // Sync with Clerk on mount and when success parameter is present
+  useEffect(() => {
+    if (isSignedIn) {
+      syncWithClerk();
+    }
+  }, [isSignedIn, syncWithClerk]);
+
+  // Check for successful payment
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const sessionId = searchParams.get('session_id');
+    
+    if (success === 'true' && sessionId && userId) {
+      console.log('Payment successful, checking plan status...', { sessionId, userId });
+      
+      const checkPlanStatus = async () => {
+        try {
+          // First, verify the user exists and get their current plan
+          const currentPlan = user?.privateMetadata?.plan;
+          console.log('Current user plan:', currentPlan);
+
+          const response = await fetch('/api/check-plan-status', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId,
+              sessionId,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to verify plan status');
+          }
+
+          const data = await response.json();
+          console.log('Plan status verified:', data);
+
+          // Sync with Clerk to update local state
+          await syncWithClerk();
+
+          if (data.plan === 'pro') {
+            toast.success('Payment successful! Your account has been upgraded to Pro.');
+          } else {
+            toast.error('Payment processed but plan upgrade failed. Please contact support.');
+          }
+        } catch (error) {
+          console.error('Error verifying plan status:', error);
+          toast.error('Payment processed but failed to update subscription status. Please contact support.');
+        }
+      };
+
+      // Add a small delay to allow webhook processing
+      setTimeout(checkPlanStatus, 2000);
+    }
+  }, [searchParams, syncWithClerk, userId, user]);
 
   const handleSelectPlan = async (planType: PlanType) => {
     if (!isSignedIn) {
+      toast.error('Please sign in to upgrade your plan');
+      return;
+    }
+
+    if (!userId) {
+      toast.error('User ID not found. Please try signing out and back in.');
       return;
     }
 
     setIsLoading(true);
     try {
-      if (planType === 'free' && userPlan.plan === 'pro') {
+      if (planType === 'free' && plan === 'pro') {
         // Handle downgrade to free
+        const confirmed = window.confirm('Are you sure you want to cancel your Pro subscription?');
+        if (!confirmed) {
+          return;
+        }
+
         await cancelSubscription();
-        updatePlan('free');
+        await syncWithClerk();
         toast.success('Successfully downgraded to free plan');
       } else if (planType === 'pro') {
         // Handle upgrade to pro
-        const result = await createCheckoutSession(planType, billingPeriod);
-        if (!result) {
-          throw new Error('Failed to create checkout session');
+        console.log('Starting pro upgrade for user:', { userId, currentPlan: plan });
+        
+        // Verify user can be upgraded
+        if (plan === 'pro') {
+          toast.error('You are already on the Pro plan');
+          return;
         }
+
+        await createCheckoutSession(planType, billingPeriod, userId);
       }
     } catch (error) {
       console.error('Error handling plan selection:', error);
@@ -50,11 +127,11 @@ const PricingPage: React.FC = () => {
       return planType === 'free' ? 'Start Free' : 'Sign Up';
     }
     
-    if (userPlan.plan === planType) {
+    if (plan === planType) {
       return planType === 'pro' ? 'Cancel Subscription' : 'Current Plan';
     }
     
-    return planType === 'free' ? 'Downgrade' : 'Upgrade';
+    return planType === 'free' ? 'Downgrade' : 'Upgrade to Pro';
   };
 
   // Wait for Clerk to load
@@ -70,7 +147,7 @@ const PricingPage: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-display font-bold text-gray-900">Pricing Plans</h1>
-        {userPlan.plan === 'pro' && (
+        {plan === 'pro' && (
           <div className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white px-4 py-2 rounded-full">
             <Crown className="h-5 w-5" />
             <span className="font-medium">Pro User</span>
@@ -107,101 +184,68 @@ const PricingPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        {pricingPlans.map((plan) => (
+        {pricingPlans.map((planItem) => (
           <div 
-            key={plan.type}
+            key={planItem.type}
             className={`rounded-lg shadow-sm border overflow-hidden ${
-              plan.recommended ? 'border-primary-400 ring-2 ring-primary-400' : 'border-gray-200'
+              planItem.recommended ? 'border-primary-400 ring-2 ring-primary-400' : 'border-gray-200'
             }`}
           >
-            {plan.recommended && (
+            {planItem.recommended && (
               <div className="bg-primary-600 text-white text-center py-1 text-sm font-medium">
                 Recommended
               </div>
             )}
             
             <div className="p-6 bg-white">
-              <h3 className="text-xl font-display font-bold text-gray-900">{plan.name}</h3>
-              <p className="mt-1 text-sm text-gray-500">{plan.description}</p>
+              <h3 className="text-xl font-display font-bold text-gray-900">{planItem.name}</h3>
+              <p className="mt-1 text-sm text-gray-500">{planItem.description}</p>
               
               <div className="mt-4 flex items-baseline">
                 <span className="text-4xl font-bold text-gray-900">
-                  ${billingPeriod === 'annually' ? (plan.price * 0.8).toFixed(2) : plan.price}
+                  ${billingPeriod === 'annually' ? (planItem.price * 0.8).toFixed(2) : planItem.price}
                 </span>
                 <span className="ml-1 text-gray-500">/{billingPeriod === 'annually' ? 'year' : 'month'}</span>
               </div>
               
-              {billingPeriod === 'annually' && plan.price > 0 && (
+              {billingPeriod === 'annually' && planItem.price > 0 && (
                 <p className="mt-1 text-xs text-primary-600">
-                  Save ${(plan.price * 0.2 * 12).toFixed(2)} per year
+                  Save ${(planItem.price * 0.2 * 12).toFixed(2)} per year
                 </p>
               )}
               
               <div className="mt-6">
                 {isSignedIn ? (
                   <Button
-                    variant={plan.recommended ? 'primary' : userPlan.plan === plan.type ? 'outline' : 'secondary'}
+                    variant={planItem.recommended ? 'primary' : plan === planItem.type ? 'outline' : 'secondary'}
                     fullWidth
-                    disabled={isLoading || (userPlan.plan === plan.type && plan.type === 'free')}
-                    onClick={() => handleSelectPlan(plan.type)}
+                    disabled={isLoading || (plan === planItem.type && planItem.type === 'free')}
+                    onClick={() => handleSelectPlan(planItem.type)}
                   >
-                    {isLoading ? 'Processing...' : getButtonText(plan.type)}
+                    {isLoading ? 'Processing...' : getButtonText(planItem.type)}
                   </Button>
                 ) : (
                   <SignUpButton mode="modal">
                     <Button
-                      variant={plan.recommended ? 'primary' : 'secondary'}
+                      variant={planItem.recommended ? 'primary' : 'secondary'}
                       fullWidth
                     >
-                      {plan.type === 'free' ? 'Start Free' : 'Sign Up'}
+                      {getButtonText(planItem.type)}
                     </Button>
                   </SignUpButton>
                 )}
               </div>
-            </div>
-            
-            <div className="py-6 px-6 bg-gray-50 border-t border-gray-200 space-y-6">
-              <div>
-                <h4 className="text-sm font-medium text-gray-900">Plan includes:</h4>
-                <ul className="mt-4 space-y-3">
-                  {plan.features.map((feature, index) => (
-                    <li key={index} className="flex">
-                      <Check className="h-5 w-5 text-green-500 flex-shrink-0 mr-2" />
-                      <span className="text-sm text-gray-500">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 mb-3">Available models:</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    {plan.models.includes('ninja') ? (
-                      <Check className="h-5 w-5 text-green-500 flex-shrink-0 mr-2" />
-                    ) : (
-                      <X className="h-5 w-5 text-gray-300 flex-shrink-0 mr-2" />
-                    )}
-                    <span className="text-sm text-gray-500">Ninja</span>
-                  </div>
-                  <div className="flex items-center">
-                    {plan.models.includes('ghost') ? (
-                      <Check className="h-5 w-5 text-green-500 flex-shrink-0 mr-2" />
-                    ) : (
-                      <X className="h-5 w-5 text-gray-300 flex-shrink-0 mr-2" />
-                    )}
-                    <span className="text-sm text-gray-500">Ghost</span>
-                  </div>
-                  <div className="flex items-center">
-                    {plan.models.includes('generator') ? (
-                      <Check className="h-5 w-5 text-green-500 flex-shrink-0 mr-2" />
-                    ) : (
-                      <X className="h-5 w-5 text-gray-300 flex-shrink-0 mr-2" />
-                    )}
-                    <span className="text-sm text-gray-500">Generator</span>
-                  </div>
-                </div>
-              </div>
+
+              <ul className="mt-6 space-y-4">
+                {planItem.features.map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <Check className="h-5 w-5 text-primary-500" />
+                    </div>
+                    <p className="ml-3 text-sm text-gray-700">{feature}</p>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         ))}

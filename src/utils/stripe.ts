@@ -3,17 +3,25 @@ import { PlanType } from '../types';
 import { pricingPlans } from '../data/pricing';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
-const API_URL = 'http://localhost:5000';
 
-export const createCheckoutSession = async (planType: PlanType, billingPeriod: 'monthly' | 'annually') => {
+export const createCheckoutSession = async (planType: PlanType, billingPeriod: 'monthly' | 'annually', userId: string) => {
   try {
     const plan = pricingPlans.find(p => p.type === planType);
     if (!plan) throw new Error('Invalid plan type');
 
     const priceId = billingPeriod === 'monthly' ? plan.stripePriceId.monthly : plan.stripePriceId.annually;
-    if (!priceId) throw new Error(`Price ID not found for ${planType} plan (${billingPeriod})`);
+    if (!priceId) {
+      throw new Error(`Price ID not found for ${planType} plan (${billingPeriod}). Please check your environment variables.`);
+    }
 
-    const response = await fetch(`${API_URL}/api/create-checkout-session`, {
+    console.log('Creating checkout session with:', {
+      planType,
+      billingPeriod,
+      priceId,
+      userId
+    });
+
+    const response = await fetch(`/api/create-checkout-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -22,14 +30,15 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
         priceId,
         planType,
         billingPeriod,
+        userId,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      throw new Error(
-        errorData?.error || `HTTP error! status: ${response.status}`
-      );
+      const errorMessage = errorData?.error || `HTTP error! status: ${response.status}`;
+      const errorDetails = errorData?.details ? `: ${errorData.details}` : '';
+      throw new Error(errorMessage + errorDetails);
     }
 
     const { sessionId } = await response.json();
@@ -38,13 +47,14 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
     }
 
     const stripe = await stripePromise;
-    if (!stripe) throw new Error('Stripe not initialized');
+    if (!stripe) throw new Error('Stripe not initialized. Please check your Stripe public key.');
     
     const { error } = await stripe.redirectToCheckout({
       sessionId,
     });
 
     if (error) {
+      console.error('Stripe redirect error:', error);
       throw error;
     }
   } catch (error) {
@@ -55,7 +65,7 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
 
 export const cancelSubscription = async () => {
   try {
-    const response = await fetch(`${API_URL}/api/cancel-subscription`, {
+    const response = await fetch(`/api/cancel-subscription`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

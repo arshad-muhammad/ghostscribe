@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev:frontend": "vite",
     "server": "nodemon --watch server.ts --exec tsx server.ts",
-    "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+    "dev": "concurrently \"npm run server\" \"npm run dev:frontend\"",
     "build": "tsc && vite build",
+    "vercel-build": "vite build",
+    "start": "node dist/server.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

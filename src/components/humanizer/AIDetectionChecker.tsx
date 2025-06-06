@@ -6,7 +6,8 @@ import { useUserPlanStore } from '../../store/userPlanStore';
 
 export const AIDetectionChecker: React.FC = () => {
   const { humanizedText, loading, detectionScore, checkDetection } = useHumanizeStore();
-  const { userPlan } = useUserPlanStore();
+  const { getFeatures } = useUserPlanStore();
+  const features = getFeatures();
   const [error, setError] = useState<string | null>(null);
 
   const handleCheckDetection = async () => {
@@ -15,7 +16,7 @@ export const AIDetectionChecker: React.FC = () => {
       return;
     }
     
-    if (!userPlan.hasAIDetection) {
+    if (!features.hasAIDetection) {
       setError('AI detection checking is not available on your current plan');
       return;
     }
@@ -67,7 +68,7 @@ export const AIDetectionChecker: React.FC = () => {
         <Button
           onClick={handleCheckDetection}
           isLoading={loading}
-          disabled={!humanizedText || !userPlan.hasAIDetection}
+          disabled={!humanizedText || !features.hasAIDetection}
           leftIcon={<ShieldCheck className="h-5 w-5" />}
           size="sm"
         >
@@ -82,7 +83,7 @@ export const AIDetectionChecker: React.FC = () => {
         </div>
       )}
       
-      {!userPlan.hasAIDetection && !error && (
+      {!features.hasAIDetection && !error && (
         <div className="mb-4 p-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-md">
           <p className="text-sm">AI detection checking is available on paid plans. <a href="/pricing" className="text-primary-600 hover:text-primary-800">Upgrade your plan</a> to access this feature.</p>
         </div>

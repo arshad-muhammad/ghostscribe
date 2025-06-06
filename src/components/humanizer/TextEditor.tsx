@@ -15,7 +15,8 @@ export const TextEditor: React.FC = () => {
     addToHistory
   } = useHumanizeStore();
   
-  const { userPlan } = useUserPlanStore();
+  const { getFeatures, deductWords } = useUserPlanStore();
+  const features = getFeatures();
   
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -28,13 +29,13 @@ export const TextEditor: React.FC = () => {
     
     const wordCount = originalText.split(/\s+/).filter(Boolean).length;
     
-    if (wordCount > userPlan.maxWordsPerRequest) {
-      setError(`Your plan allows a maximum of ${userPlan.maxWordsPerRequest} words per request`);
+    if (wordCount > features.wordsPerRequest) {
+      setError(`Your plan allows a maximum of ${features.wordsPerRequest} words per request`);
       return;
     }
     
-    if (wordCount > userPlan.wordsRemaining) {
-      setError(`You only have ${userPlan.wordsRemaining} words remaining in your plan`);
+    if (wordCount > features.wordsRemaining) {
+      setError(`You only have ${features.wordsRemaining} words remaining in your plan`);
       return;
     }
     
@@ -42,6 +43,9 @@ export const TextEditor: React.FC = () => {
     
     try {
       await humanizeText();
+      
+      // Deduct words from remaining count
+      deductWords(wordCount);
       
       // Add to history
       addToHistory({
@@ -111,7 +115,7 @@ export const TextEditor: React.FC = () => {
             {loading ? 'Humanizing...' : 'Humanize Text'}
           </Button>
           <div className="mt-2 text-xs text-gray-500 text-center">
-            You have {userPlan.wordsRemaining.toLocaleString()} words remaining in your plan
+            You have {features.wordsRemaining.toLocaleString()} words remaining in your plan
           </div>
         </div>
       </div>
