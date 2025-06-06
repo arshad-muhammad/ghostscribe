@@ -23,9 +23,10 @@ export const Button: React.FC<ButtonProps> = ({
   fullWidth = false,
   className,
   disabled,
+  onClick,
   ...props
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
+  const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2';
   
   const variantStyles: Record<ButtonVariant, string> = {
     primary: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
@@ -44,7 +45,14 @@ export const Button: React.FC<ButtonProps> = ({
   };
   
   const widthStyle = fullWidth ? 'w-full' : '';
+  const disabledStyle = (disabled || isLoading) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer';
   
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!disabled && !isLoading && onClick) {
+      onClick(e);
+    }
+  };
+
   return (
     <button
       className={twMerge(
@@ -52,9 +60,11 @@ export const Button: React.FC<ButtonProps> = ({
         variantStyles[variant],
         sizeStyles[size],
         widthStyle,
+        disabledStyle,
         className
       )}
       disabled={disabled || isLoading}
+      onClick={handleClick}
       {...props}
     >
       {isLoading && (

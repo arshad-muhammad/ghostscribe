@@ -29,3 +29,19 @@ export function formatDistanceToNow(date: Date): string {
   const diffInYears = Math.floor(diffInMonths / 12);
   return `${diffInYears} ${diffInYears === 1 ? 'year' : 'years'} ago`;
 }
+
+export function formatNextBillingDate(dateString: string | undefined): string {
+  if (!dateString) return 'N/A';
+  
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'N/A';
+
+  // Format: "Jan 1, 2024"
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric'
+  };
+  
+  return date.toLocaleDateString('en-US', options);
+}

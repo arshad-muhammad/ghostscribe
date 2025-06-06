@@ -2,7 +2,7 @@ import React from 'react';
 import { ModelType } from '../../types';
 import { useHumanizeStore } from '../../store/humanizeStore';
 import { Ghost, Zap, Cpu, Lock, Crown } from 'lucide-react';
-import { useUserPlan } from '../../hooks/useUserPlan';
+import { useUserPlanStore } from '../../store/userPlanStore';
 
 interface ModelOption {
   type: ModelType;
@@ -14,7 +14,8 @@ interface ModelOption {
 
 export const AIModelSelector: React.FC = () => {
   const { model, setModel } = useHumanizeStore();
-  const { isPro, userPlan } = useUserPlan();
+  const { plan, isLoading } = useUserPlanStore();
+  const isPro = plan === 'pro';
 
   const modelOptions: ModelOption[] = [
     {
@@ -121,10 +122,14 @@ export const AIModelSelector: React.FC = () => {
       {/* Plan Status */}
       <div className="mt-2 flex items-center justify-between text-sm">
         <span className="text-gray-600">Current Plan:</span>
-        <span className={`font-medium ${isPro ? 'text-amber-600' : 'text-gray-900'}`}>
-          {userPlan.toUpperCase()}
-          {isPro && <Crown className="w-4 h-4 ml-1 inline-block text-amber-500" />}
-        </span>
+        {isLoading ? (
+          <span className="text-gray-400">Loading...</span>
+        ) : (
+          <span className={`font-medium ${isPro ? 'text-amber-600' : 'text-gray-900'}`}>
+            {plan.toUpperCase()}
+            {isPro && <Crown className="w-4 h-4 ml-1 inline-block text-amber-500" />}
+          </span>
+        )}
       </div>
     </div>
   );

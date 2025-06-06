@@ -1,11 +1,12 @@
 import React from 'react';
-import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
+import { Navigate } from 'react-router-dom';
 import { TextEditor } from '../components/humanizer/TextEditor';
 import { AIModelSelector } from '../components/humanizer/AIModelSelector';
 import { HumanizationLevelSlider } from '../components/humanizer/HumanizationLevelSlider';
 import { LanguageSelector } from '../components/humanizer/LanguageSelector';
 import { AIDetectionChecker } from '../components/humanizer/AIDetectionChecker';
 import { Wand2 } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
 
 const HumanizerContent: React.FC = () => {
   return (
@@ -96,15 +97,14 @@ const HumanizerContent: React.FC = () => {
 };
 
 const HumanizerPage: React.FC = () => {
+  const { isAuthenticated } = useAuthStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+
   return (
-    <>
-      <SignedIn>
-        <HumanizerContent />
-      </SignedIn>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-    </>
+    <HumanizerContent />
   );
 };
 

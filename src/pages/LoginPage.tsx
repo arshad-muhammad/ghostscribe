@@ -24,7 +24,7 @@ const LoginPage: React.FC = () => {
       await login(email, password);
       navigate('/dashboard');
     } catch (error) {
-      setError('Invalid email or password');
+      setError(error instanceof Error ? error.message : 'Invalid email or password');
     }
   };
 
@@ -34,7 +34,7 @@ const LoginPage: React.FC = () => {
       await loginWithGoogle();
       navigate('/dashboard');
     } catch (error) {
-      setError('Google login failed');
+      setError(error instanceof Error ? error.message : 'Google login failed');
     }
   };
 
@@ -123,9 +123,9 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div className="text-sm">
-              <a href="#" className="font-medium text-primary-600 hover:text-primary-500">
+              <Link to="/reset-password" className="font-medium text-primary-600 hover:text-primary-500">
                 Forgot your password?
-              </a>
+              </Link>
             </div>
           </div>
 

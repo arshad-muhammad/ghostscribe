@@ -1,30 +1,61 @@
-import { loadStripe } from '@stripe/stripe-js';
 import { PlanType } from '../types';
 import { pricingPlans } from '../data/pricing';
+import { supabase } from './supabase';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Validate price ID format
+const validatePriceId = (priceId: string) => {
+  if (!priceId.startsWith('price_')) {
+    throw new Error(`Invalid price ID format: ${priceId}. Must start with "price_"`);
+  }
+  return priceId;
+};
 
 export const createCheckoutSession = async (planType: PlanType, billingPeriod: 'monthly' | 'annually', userId: string) => {
   try {
+    // First verify we have a valid session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('Session error:', sessionError);
+      throw new Error(`Authentication error: ${sessionError.message}`);
+    }
+    
+    if (!session?.access_token) {
+      console.error('No session or access token found');
+      throw new Error('No active session found. Please log in again.');
+    }
+
+    // Then get the plan and price ID
     const plan = pricingPlans.find(p => p.type === planType);
     if (!plan) throw new Error('Invalid plan type');
 
     const priceId = billingPeriod === 'monthly' ? plan.stripePriceId.monthly : plan.stripePriceId.annually;
-    if (!priceId) {
-      throw new Error(`Price ID not found for ${planType} plan (${billingPeriod}). Please check your environment variables.`);
+    
+    // Validate price ID
+    try {
+      validatePriceId(priceId);
+    } catch (error) {
+      console.error('Price ID validation failed:', error);
+      throw new Error(`Invalid price ID for ${planType} plan (${billingPeriod}). Please check your environment variables.`);
     }
 
     console.log('Creating checkout session with:', {
       planType,
       billingPeriod,
       priceId,
-      userId
+      userId,
+      hasToken: true,
+      tokenPreview: session.access_token.substring(0, 20) + '...'
     });
 
-    const response = await fetch(`/api/create-checkout-session`, {
+    // Make the API request
+    const response = await fetch(`${API_URL}/api/create-checkout-session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
       },
       body: JSON.stringify({
         priceId,
@@ -36,27 +67,61 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      const errorMessage = errorData?.error || `HTTP error! status: ${response.status}`;
-      const errorDetails = errorData?.details ? `: ${errorData.details}` : '';
-      throw new Error(errorMessage + errorDetails);
+      console.error('Checkout session error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData,
+        requestDetails: {
+          url: `${API_URL}/api/create-checkout-session`,
+          hasToken: !!session.access_token,
+          userId,
+          priceId
+        }
+      });
+      
+      if (response.status === 401) {
+        // Try to refresh the session
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshData.session) {
+          throw new Error('Session expired. Please log in again.');
+        }
+        
+        // Retry with new token
+        const retryResponse = await fetch(`${API_URL}/api/create-checkout-session`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${refreshData.session.access_token}`
+          },
+          body: JSON.stringify({
+            priceId,
+            planType,
+            billingPeriod,
+            userId,
+          }),
+        });
+
+        if (!retryResponse.ok) {
+          const retryErrorData = await retryResponse.json().catch(() => null);
+          throw new Error(retryErrorData?.error || `Failed to create checkout session: ${retryResponse.status}`);
+        }
+
+        const { url } = await retryResponse.json();
+        if (!url) throw new Error('No checkout URL returned from server');
+        window.location.href = url;
+        return;
+      }
+
+      throw new Error(errorData?.error || `Failed to create checkout session: ${response.status}`);
     }
 
-    const { sessionId } = await response.json();
-    if (!sessionId) {
-      throw new Error('No session ID returned from server');
+    const { url } = await response.json();
+    if (!url) {
+      throw new Error('No checkout URL returned from server');
     }
 
-    const stripe = await stripePromise;
-    if (!stripe) throw new Error('Stripe not initialized. Please check your Stripe public key.');
-    
-    const { error } = await stripe.redirectToCheckout({
-      sessionId,
-    });
-
-    if (error) {
-      console.error('Stripe redirect error:', error);
-      throw error;
-    }
+    // Redirect to Stripe Checkout
+    window.location.href = url;
   } catch (error) {
     console.error('Error creating checkout session:', error);
     throw error;
@@ -65,23 +130,30 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
 
 export const cancelSubscription = async () => {
   try {
-    const response = await fetch(`/api/cancel-subscription`, {
+    // Get current user session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('No active session found');
+    }
+
+    const response = await fetch(`${API_URL}/api/cancel-subscription`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
+        'Authorization': `Bearer ${session.access_token}`
+      }
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(
-        errorData?.error || `Failed to cancel subscription: ${response.status}`
-      );
+      console.error('Cancellation response:', data);
+      throw new Error(data.details || data.error || `Failed to cancel subscription: ${response.status}`);
     }
 
-    return await response.json();
+    return data;
   } catch (error) {
-    console.error('Error canceling subscription:', error);
+    console.error('Error in cancelSubscription:', error);
     throw error;
   }
 }; 

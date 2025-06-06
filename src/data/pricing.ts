@@ -18,6 +18,14 @@ export interface PricingPlan {
   };
 }
 
+// Make sure these match your Stripe product price IDs
+const MONTHLY_PRICE_ID = import.meta.env.VITE_STRIPE_MONTHLY_PRICE_ID;
+const YEARLY_PRICE_ID = import.meta.env.VITE_STRIPE_YEARLY_PRICE_ID;
+
+if (!MONTHLY_PRICE_ID || !YEARLY_PRICE_ID) {
+  console.error('Missing Stripe price IDs in environment variables');
+}
+
 export const pricingPlans: PricingPlan[] = [
   {
     type: 'free',
@@ -26,13 +34,13 @@ export const pricingPlans: PricingPlan[] = [
     price: 0,
     features: [
       'Basic content humanization',
-      'Limited to 1,000 words/day',
+      'Limited to 2,000 words/day',
       'Max 500 words per request',
       'Standard support'
     ],
     models: ['ninja'],
     limits: {
-      wordsPerDay: 1000,
+      wordsPerDay: 2000,
       wordsPerRequest: 500
     },
     stripePriceId: {
@@ -47,7 +55,8 @@ export const pricingPlans: PricingPlan[] = [
     price: 9.99,
     features: [
       'Enterprise-grade humanization',
-      '250,000 words/day',
+      '500,000 total words',
+      '5,000 words per day',
       'Max 10,000 words per request',
       'Premium AI detection suite',
       'Advanced multi-language support',
@@ -57,12 +66,12 @@ export const pricingPlans: PricingPlan[] = [
     models: ['ninja', 'ghost', 'generator'],
     recommended: true,
     limits: {
-      wordsPerDay: 250000,
+      wordsPerDay: 5000,
       wordsPerRequest: 10000
     },
     stripePriceId: {
-      monthly: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_MONTHLY || '',
-      annually: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_YEARLY || ''
+      monthly: MONTHLY_PRICE_ID || '',
+      annually: YEARLY_PRICE_ID || ''
     }
   }
 ];

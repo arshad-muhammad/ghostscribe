@@ -1,120 +1,118 @@
 import { create } from 'zustand';
-import { PlanType, PLAN_FEATURES } from '../types';
+import { supabase, getUserProfile } from '../utils/supabase';
 
-// Add Clerk types
-declare global {
-  interface Window {
-    Clerk: {
-      user: Promise<{
-        privateMetadata: Record<string, any>;
-      } | null>;
-    };
-  }
+interface PlanFeatures {
+  wordsPerRequest: number;
+  wordsRemaining: number;
+  hasAIDetection: boolean;
+  hasAdvancedModels: boolean;
 }
 
 interface UserPlanState {
-  plan: PlanType;
-  subscriptionId: string | null;
-  subscriptionStatus: string | null;
-  currentPeriodEnd: string | null;
+  plan: 'free' | 'pro';
   wordsRemaining: number;
-  updatePlan: (plan: PlanType) => void;
-  updateSubscription: (data: {
-    subscriptionId: string;
-    subscriptionStatus: string;
-    currentPeriodEnd: string;
-  }) => void;
-  deductWords: (count: number) => void;
-  resetWordCount: () => void;
-  syncWithClerk: () => Promise<void>;
-  getFeatures: () => {
-    wordsPerDay: number;
-    wordsPerRequest: number;
-    hasAIDetection: boolean;
-    modelsAvailable: string[];
-    wordsRemaining: number;
-  };
+  subscriptionStatus: string | undefined;
+  currentPeriodEnd?: string;
+  isLoading: boolean;
+  error: string | null;
+  checkPlanStatus: () => Promise<void>;
+  getFeatures: () => PlanFeatures;
+  deductWords: (wordCount: number) => Promise<void>;
 }
 
 export const useUserPlanStore = create<UserPlanState>((set, get) => ({
   plan: 'free',
-  subscriptionId: null,
-  subscriptionStatus: null,
-  currentPeriodEnd: null,
-  wordsRemaining: PLAN_FEATURES.free.wordsPerDay,
-  
-  updatePlan: (plan) => set((state) => ({
-    plan,
-    wordsRemaining: PLAN_FEATURES[plan].wordsPerDay,
-  })),
-  
-  updateSubscription: (data) => set(data),
-  
-  deductWords: (count) => set((state) => ({
-    wordsRemaining: Math.max(0, state.wordsRemaining - count),
-  })),
-  
-  resetWordCount: () => set((state) => ({
-    wordsRemaining: PLAN_FEATURES[state.plan].wordsPerDay,
-  })),
-  
-  syncWithClerk: async () => {
+  wordsRemaining: 2000,
+  subscriptionStatus: undefined,
+  currentPeriodEnd: undefined,
+  isLoading: false,
+  error: null,
+
+  checkPlanStatus: async () => {
     try {
-      if (!window.Clerk) {
-        console.log('Clerk not initialized yet');
+      console.log('Checking plan status...');
+      set({ isLoading: true, error: null });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.log('No session found, setting default values');
+        set({ 
+          plan: 'free',
+          wordsRemaining: 2000,
+          subscriptionStatus: undefined,
+          currentPeriodEnd: undefined,
+          isLoading: false 
+        });
         return;
       }
 
-      const user = await window.Clerk.user;
-      if (!user) {
-        console.log('No user found');
-        return;
-      }
+      console.log('Session found, fetching profile for user:', session.user.id);
+      const profile = await getUserProfile(session.user.id);
 
-      console.log('Fetching user metadata from Clerk...');
-      
-      const privateMetadata = user.privateMetadata as {
-        plan?: PlanType;
-        subscriptionId?: string;
-        subscriptionStatus?: string;
-        currentPeriodEnd?: string;
+      console.log('Profile data:', {
+        plan: profile.plan,
+        wordsRemaining: profile.words_remaining,
+        subscriptionStatus: profile.subscription_status,
+        currentPeriodEnd: profile.current_period_end,
+        userId: profile.id
+      });
+
+      // Ensure we have valid data
+      const updatedState = {
+        plan: profile.plan || 'free',
+        wordsRemaining: profile.words_remaining || 2000,
+        subscriptionStatus: profile.subscription_status,
+        currentPeriodEnd: profile.current_period_end,
+        isLoading: false,
+        error: null
       };
 
-      console.log('Current user metadata:', privateMetadata);
+      console.log('Updating store with:', updatedState);
+      set(updatedState);
 
-      // Set default values if metadata is not present
-      const plan = privateMetadata?.plan || 'free';
-      const subscriptionId = privateMetadata?.subscriptionId || null;
-      const subscriptionStatus = privateMetadata?.subscriptionStatus || null;
-      const currentPeriodEnd = privateMetadata?.currentPeriodEnd || null;
-
-      console.log('Setting user plan state:', {
-        plan,
-        subscriptionId,
-        subscriptionStatus,
-        currentPeriodEnd
-      });
-
-      set({
-        plan,
-        subscriptionId,
-        subscriptionStatus,
-        currentPeriodEnd,
-        wordsRemaining: PLAN_FEATURES[plan].wordsPerDay,
-      });
-
-      console.log('Successfully updated user plan state');
     } catch (error) {
-      console.error('Error syncing with Clerk:', error);
-      throw error; // Re-throw to handle in the component
+      console.error('Error fetching plan status:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch plan status',
+        isLoading: false,
+        plan: 'free',
+        wordsRemaining: 2000,
+        subscriptionStatus: undefined,
+        currentPeriodEnd: undefined
+      });
     }
   },
-  
+
   getFeatures: () => {
     const state = get();
+    const isPro = state.plan === 'pro';
+
     return {
-      ...PLAN_FEATURES[state.plan],
+      wordsPerRequest: isPro ? 10000 : 500,
       wordsRemaining: state.wordsRemaining,
+      hasAIDetection: isPro,
+      hasAdvancedModels: isPro
     };
   },
+
+  deductWords: async (wordCount: number) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const newWordsRemaining = Math.max(0, get().wordsRemaining - wordCount);
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ words_remaining: newWordsRemaining })
+        .eq('id', session.user.id);
+
+      if (error) throw error;
+
+      set({ wordsRemaining: newWordsRemaining });
+    } catch (error) {
+      console.error('Error deducting words:', error);
+      throw error;
+    }
+  }
 }));

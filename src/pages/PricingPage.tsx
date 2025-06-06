@@ -1,287 +1,485 @@
-import React, { useState, useEffect } from 'react';
-import { pricingPlans } from '../data/pricing';
-import { Button } from '../components/ui/Button';
-import { Check, X, Crown } from 'lucide-react';
-import { useAuth, SignUpButton, useUser } from '@clerk/clerk-react';
-import { useUserPlanStore } from '../store/userPlanStore';
-import { PlanType } from '../types';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 import { createCheckoutSession, cancelSubscription } from '../utils/stripe';
+import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
-import { useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { 
+  CheckIcon, 
+  SparklesIcon, 
+  StarIcon, 
+  RocketLaunchIcon, 
+  CalendarIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon
+} from '@heroicons/react/24/solid';
+import { useUserPlanStore } from '../store/userPlanStore';
+import { formatNextBillingDate } from '../utils/date';
 
 const PricingPage: React.FC = () => {
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'annually'>('monthly');
-  const { isSignedIn, isLoaded, userId } = useAuth();
-  const { user } = useUser();
-  const { plan, syncWithClerk } = useUserPlanStore();
-  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isAuthenticated, user } = useAuthStore();
+  const { wordsRemaining, currentPeriodEnd, plan, subscriptionStatus, checkPlanStatus, isLoading, error } = useUserPlanStore();
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  // Sync with Clerk on mount and when success parameter is present
   useEffect(() => {
-    if (isSignedIn) {
-      syncWithClerk();
-    }
-  }, [isSignedIn, syncWithClerk]);
-
-  // Check for successful payment
-  useEffect(() => {
+    // Handle successful subscription upgrade
     const success = searchParams.get('success');
-    const sessionId = searchParams.get('session_id');
-    
-    if (success === 'true' && sessionId && userId) {
-      console.log('Payment successful, checking plan status...', { sessionId, userId });
-      
-      const checkPlanStatus = async () => {
-        try {
-          // First, verify the user exists and get their current plan
-          const currentPlan = user?.privateMetadata?.plan;
-          console.log('Current user plan:', currentPlan);
-
-          const response = await fetch('/api/check-plan-status', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              userId,
-              sessionId,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to verify plan status');
-          }
-
-          const data = await response.json();
-          console.log('Plan status verified:', data);
-
-          // Sync with Clerk to update local state
-          await syncWithClerk();
-
-          if (data.plan === 'pro') {
-            toast.success('Payment successful! Your account has been upgraded to Pro.');
-          } else {
-            toast.error('Payment processed but plan upgrade failed. Please contact support.');
-          }
-        } catch (error) {
-          console.error('Error verifying plan status:', error);
-          toast.error('Payment processed but failed to update subscription status. Please contact support.');
-        }
-      };
-
-      // Add a small delay to allow webhook processing
-      setTimeout(checkPlanStatus, 2000);
+    if (success === 'true') {
+      toast.success('Successfully upgraded to Pro!');
+      navigate('/dashboard');
     }
-  }, [searchParams, syncWithClerk, userId, user]);
+  }, [searchParams, navigate]);
 
-  const handleSelectPlan = async (planType: PlanType) => {
-    if (!isSignedIn) {
-      toast.error('Please sign in to upgrade your plan');
+  // Add effect to check plan status when component mounts
+  useEffect(() => {
+    const fetchPlanStatus = async () => {
+      try {
+        await checkPlanStatus();
+        console.log('Plan status checked:', {
+          plan,
+          currentPeriodEnd,
+          wordsRemaining
+        });
+      } catch (err) {
+        console.error('Error checking plan status:', err);
+        toast.error('Failed to load subscription details');
+      }
+    };
+    fetchPlanStatus();
+  }, [checkPlanStatus]);
+
+  const handleUpgrade = async (billing: 'monthly' | 'annually') => {
+    if (!isAuthenticated || !user) {
+      navigate(`/register?plan=pro&billing=${billing}`);
       return;
     }
 
-    if (!userId) {
-      toast.error('User ID not found. Please try signing out and back in.');
-      return;
-    }
-
-    setIsLoading(true);
     try {
-      if (planType === 'free' && plan === 'pro') {
-        // Handle downgrade to free
-        const confirmed = window.confirm('Are you sure you want to cancel your Pro subscription?');
-        if (!confirmed) {
-          return;
-        }
-
-        await cancelSubscription();
-        await syncWithClerk();
-        toast.success('Successfully downgraded to free plan');
-      } else if (planType === 'pro') {
-        // Handle upgrade to pro
-        console.log('Starting pro upgrade for user:', { userId, currentPlan: plan });
-        
-        // Verify user can be upgraded
-        if (plan === 'pro') {
-          toast.error('You are already on the Pro plan');
-          return;
-        }
-
-        await createCheckoutSession(planType, billingPeriod, userId);
-      }
+      await createCheckoutSession('pro', billing, user.id);
     } catch (error) {
-      console.error('Error handling plan selection:', error);
-      if (error instanceof Error) {
-        toast.error(`Failed to process plan selection: ${error.message}`);
-      } else {
-        toast.error('Failed to process plan selection');
-      }
+      console.error('Error creating checkout session:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to start subscription process');
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    try {
+      setIsCancelling(true);
+      await cancelSubscription();
+      toast.success('Subscription cancelled successfully');
+      await checkPlanStatus(); // Refresh the plan status
+      setShowCancelModal(false);
+    } catch (error) {
+      console.error('Error cancelling subscription:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel subscription');
     } finally {
-      setIsLoading(false);
+      setIsCancelling(false);
     }
   };
 
-  const getButtonText = (planType: PlanType) => {
-    if (!isSignedIn) {
-      return planType === 'free' ? 'Start Free' : 'Sign Up';
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2
+      }
     }
-    
-    if (plan === planType) {
-      return planType === 'pro' ? 'Cancel Subscription' : 'Current Plan';
-    }
-    
-    return planType === 'free' ? 'Downgrade' : 'Upgrade to Pro';
   };
 
-  // Wait for Clerk to load
-  if (!isLoaded) {
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  };
+
+  const isPro = plan === 'pro';
+
+  // If user is on pro plan, show pro status instead of pricing
+  if (isPro) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen bg-gradient-to-b from-white via-gray-50 to-white py-24 sm:py-32 px-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="mx-auto max-w-3xl"
+        >
+          <div className="text-center mb-12">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+              className="inline-block mb-6"
+            >
+              <div className="p-3 rounded-full bg-primary-50 text-primary-600">
+                <SparklesIcon className="h-8 w-8" />
+              </div>
+            </motion.div>
+            <motion.h1 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="text-4xl font-bold text-gray-900 mb-4"
+            >
+              You're on the Pro Plan! 🎉
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="text-lg text-gray-600"
+            >
+              Enjoy premium features and unlimited access
+            </motion.p>
+          </div>
+
+          <motion.div
+            variants={container}
+            initial="hidden"
+            animate="show"
+            className="bg-white rounded-3xl p-8 shadow-xl relative overflow-hidden"
+          >
+            {/* Decorative background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary-50 via-transparent to-transparent opacity-50" />
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full blur-3xl opacity-10 -mr-20 -mt-20" />
+            
+            <div className="relative">
+              {/* Subscription Status */}
+              <motion.div variants={item} className="flex items-center justify-between p-4 bg-primary-50/50 rounded-2xl mb-8">
+                <div className="flex items-center">
+                  <StarIcon className="h-6 w-6 text-primary-600 mr-3" />
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Active Subscription</h3>
+                    <p className="text-sm text-gray-600">Pro Plan</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium">
+                  Active
+                </span>
+              </motion.div>
+
+              {/* Usage Stats */}
+              <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center mb-2">
+                    <RocketLaunchIcon className="h-5 w-5 text-primary-600 mr-2" />
+                    <h4 className="font-medium text-gray-900">Words Remaining</h4>
+                  </div>
+                  <p className="text-2xl font-bold text-gray-900">{wordsRemaining.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">of 500,000 total words</p>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center mb-2">
+                    <CalendarIcon className="h-5 w-5 text-primary-600 mr-2" />
+                    <h4 className="font-medium text-gray-900">Next Billing</h4>
+                  </div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {isLoading ? (
+                      <span className="text-gray-400">Loading...</span>
+                    ) : error ? (
+                      <span className="text-red-500">Error loading date</span>
+                    ) : (
+                      formatNextBillingDate(currentPeriodEnd)
+                    )}
+                  </p>
+                  <p className="text-sm text-gray-600">Subscription renewal</p>
+                </div>
+              </motion.div>
+
+              {/* Features List */}
+              <motion.div variants={item} className="mb-8">
+                <h3 className="font-semibold text-gray-900 mb-4">Your Pro Features</h3>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    '500,000 total words',
+                    '5,000 words per day',
+                    'Advanced humanization',
+                    'Priority support',
+                    'Custom templates',
+                    'API access'
+                  ].map((feature, index) => (
+                    <motion.li
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 * index }}
+                      className="flex items-center text-gray-600"
+                    >
+                      <CheckIcon className="h-5 w-5 text-primary-600 mr-2 flex-shrink-0" />
+                      <span>{feature}</span>
+                    </motion.li>
+                  ))}
+                </ul>
+              </motion.div>
+
+              {/* Action Buttons */}
+              <motion.div variants={item} className="space-y-4">
+                <Button
+                  className="w-full bg-primary-600 hover:bg-primary-700 transition-colors duration-300 h-12 text-base font-medium"
+                  onClick={() => navigate('/humanizer')}
+                >
+                  Start Humanizing
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full hover:bg-primary-50/80 transition-colors duration-300 h-12 text-base border-primary-200"
+                  onClick={() => navigate('/dashboard')}
+                >
+                  View Dashboard
+                </Button>
+                <div className="pt-4 border-t border-gray-200">
+                  {plan === 'pro' && subscriptionStatus === 'active' && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-red-600 hover:bg-red-50 border-red-200 transition-colors duration-300 h-12 text-base"
+                      onClick={() => setShowCancelModal(true)}
+                    >
+                      Cancel Subscription
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+
+              {/* Cancel Subscription Modal */}
+              {showCancelModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl relative"
+                  >
+                    <button
+                      onClick={() => setShowCancelModal(false)}
+                      className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                    >
+                      <XMarkIcon className="h-6 w-6" />
+                    </button>
+
+                    <div className="flex items-center space-x-4 mb-6">
+                      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                        <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Cancel Subscription</h3>
+                        <p className="text-sm text-gray-600">Are you sure you want to cancel your subscription?</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-red-50 rounded-lg p-4 mb-6">
+                      <ul className="space-y-2 text-sm text-red-700">
+                        <li>• Your subscription will be cancelled immediately</li>
+                        <li>• You'll lose access to pro features</li>
+                        <li>• Your account will be downgraded to the free plan</li>
+                        <li>• This action cannot be undone</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex space-x-4">
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-gray-200"
+                        onClick={() => setShowCancelModal(false)}
+                      >
+                        Keep Subscription
+                      </Button>
+                      <Button
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                        onClick={handleCancelSubscription}
+                        disabled={isCancelling}
+                      >
+                        {isCancelling ? 'Cancelling...' : 'Yes, Cancel'}
+                      </Button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+
+            </div>
+          </motion.div>
+        </motion.div>
       </div>
     );
   }
 
+  // Regular pricing page for non-pro users
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-display font-bold text-gray-900">Pricing Plans</h1>
-        {plan === 'pro' && (
-          <div className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white px-4 py-2 rounded-full">
-            <Crown className="h-5 w-5" />
-            <span className="font-medium">Pro User</span>
-          </div>
-        )}
-        <p className="mt-4 text-xl text-gray-600 max-w-3xl mx-auto">
-          Choose the perfect plan for your content humanization needs
-        </p>
-        
-        <div className="mt-6">
-          <div className="relative bg-gray-100 p-1 rounded-lg inline-flex">
-            <button
-              onClick={() => setBillingPeriod('monthly')}
-              className={`px-4 py-2 text-sm font-medium rounded-md ${
-                billingPeriod === 'monthly' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingPeriod('annually')}
-              className={`px-4 py-2 text-sm font-medium rounded-md ${
-                billingPeriod === 'annually' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-700 hover:text-gray-900'
-              }`}
-            >
-              Annually <span className="text-primary-600 font-semibold">Save 20%</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        {pricingPlans.map((planItem) => (
-          <div 
-            key={planItem.type}
-            className={`rounded-lg shadow-sm border overflow-hidden ${
-              planItem.recommended ? 'border-primary-400 ring-2 ring-primary-400' : 'border-gray-200'
-            }`}
+    <div className="min-h-screen bg-gradient-to-b from-white via-gray-50 to-white py-24 sm:py-32 px-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="mx-auto max-w-7xl"
+      >
+        <div className="mx-auto max-w-4xl text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="inline-block"
           >
-            {planItem.recommended && (
-              <div className="bg-primary-600 text-white text-center py-1 text-sm font-medium">
-                Recommended
-              </div>
-            )}
-            
-            <div className="p-6 bg-white">
-              <h3 className="text-xl font-display font-bold text-gray-900">{planItem.name}</h3>
-              <p className="mt-1 text-sm text-gray-500">{planItem.description}</p>
-              
-              <div className="mt-4 flex items-baseline">
-                <span className="text-4xl font-bold text-gray-900">
-                  ${billingPeriod === 'annually' ? (planItem.price * 0.8).toFixed(2) : planItem.price}
-                </span>
-                <span className="ml-1 text-gray-500">/{billingPeriod === 'annually' ? 'year' : 'month'}</span>
-              </div>
-              
-              {billingPeriod === 'annually' && planItem.price > 0 && (
-                <p className="mt-1 text-xs text-primary-600">
-                  Save ${(planItem.price * 0.2 * 12).toFixed(2)} per year
+            <span className="inline-flex items-center rounded-full px-4 py-1 text-sm font-medium bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-600/20 mb-6">
+              Simple pricing, powerful features
+            </span>
+          </motion.div>
+          <motion.h2 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-base font-semibold leading-7 text-primary-600 tracking-wide uppercase"
+          >
+            Pricing
+          </motion.h2>
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-2 text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-400"
+          >
+            Choose the right plan for you
+          </motion.p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="mt-4 text-lg text-gray-600 max-w-2xl mx-auto"
+          >
+            Whether you're just starting out or scaling up, we have a plan that's right for you
+          </motion.p>
+        </div>
+
+        <motion.div 
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="mx-auto grid max-w-lg grid-cols-1 items-center gap-8 lg:max-w-none lg:grid-cols-2"
+        >
+          {/* Free Tier */}
+          <motion.div 
+            variants={item}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300 }}
+            className="relative rounded-3xl p-8 ring-1 ring-gray-200 xl:p-10 bg-white shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <div className="flex flex-col">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold leading-8 text-gray-900">Free</h3>
+                <div className="mt-2 flex items-baseline">
+                  <span className="text-5xl font-bold tracking-tight text-gray-900">$0</span>
+                  <span className="text-sm font-semibold leading-6 text-gray-600 ml-1">/month</span>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-gray-600">
+                  Perfect for trying out GhostScribe
                 </p>
-              )}
-              
-              <div className="mt-6">
-                {isSignedIn ? (
-                  <Button
-                    variant={planItem.recommended ? 'primary' : plan === planItem.type ? 'outline' : 'secondary'}
-                    fullWidth
-                    disabled={isLoading || (plan === planItem.type && planItem.type === 'free')}
-                    onClick={() => handleSelectPlan(planItem.type)}
-                  >
-                    {isLoading ? 'Processing...' : getButtonText(planItem.type)}
-                  </Button>
-                ) : (
-                  <SignUpButton mode="modal">
-                    <Button
-                      variant={planItem.recommended ? 'primary' : 'secondary'}
-                      fullWidth
-                    >
-                      {getButtonText(planItem.type)}
-                    </Button>
-                  </SignUpButton>
-                )}
               </div>
 
-              <ul className="mt-6 space-y-4">
-                {planItem.features.map((feature, index) => (
-                  <li key={index} className="flex items-start">
-                    <div className="flex-shrink-0">
-                      <Check className="h-5 w-5 text-primary-500" />
-                    </div>
-                    <p className="ml-3 text-sm text-gray-700">{feature}</p>
-                  </li>
+              <div className="absolute top-6 right-6">
+                <span className="inline-flex items-center rounded-full bg-primary-50/60 px-2.5 py-1 text-xs font-semibold text-primary-700 ring-1 ring-inset ring-primary-600/20">
+                  Most popular
+                </span>
+              </div>
+
+              <ul role="list" className="mt-8 space-y-4 text-sm leading-6 text-gray-600 mb-8">
+                {['1,000 words per month', 'Basic text humanization', 'Standard support'].map((feature, index) => (
+                  <motion.li 
+                    key={index}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex gap-x-3 items-center"
+                  >
+                    <CheckIcon className="h-5 w-5 flex-shrink-0 text-primary-600" />
+                    <span>{feature}</span>
+                  </motion.li>
                 ))}
               </ul>
+
+              <div className="mt-auto">
+                <Button
+                  variant="outline"
+                  className="mt-8 w-full hover:bg-primary-50 transition-colors duration-300 h-12 text-base"
+                  onClick={() => navigate('/register')}
+                  disabled={isAuthenticated}
+                >
+                  {isAuthenticated ? 'Current Plan' : 'Get started for free'}
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-      
-      <div className="mt-16 max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-8">
-          <h2 className="text-2xl font-display font-bold text-gray-900">Frequently Asked Questions</h2>
-          <div className="mt-6 grid gap-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">How does GhostScribe work?</h3>
-              <p className="mt-2 text-gray-600">
-                GhostScribe uses advanced AI models to transform AI-generated content into text that mimics human writing patterns, including natural variations, errors, and sentence structures that bypass AI detection tools.
-              </p>
+          </motion.div>
+
+          {/* Pro Tier */}
+          <motion.div 
+            variants={item}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300 }}
+            className="relative rounded-3xl p-8 xl:p-10 bg-white shadow-xl transition-all duration-300 overflow-hidden"
+          >
+            {/* Gradient border */}
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-primary-600 to-primary-400 [mask-image:linear-gradient(white,transparent)]" />
+            
+            {/* Background decoration */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary-50 to-transparent opacity-50" />
+            
+            <div className="relative">
+              <div className="mb-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold leading-8 text-gray-900">Pro</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary-100/80 px-2.5 py-1 text-xs font-semibold text-primary-700">
+                    Best value
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline">
+                  <span className="text-5xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 bg-clip-text text-transparent">$9.99</span>
+                  <span className="text-sm font-semibold leading-6 text-gray-600 ml-1">/month</span>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-gray-600">
+                  Perfect for professionals and teams
+                </p>
+              </div>
+
+              <ul role="list" className="mt-8 space-y-4 text-sm leading-6 text-gray-600 mb-8">
+                {[
+                  '500,000 words',
+                  'Advanced humanization options',
+                  'Priority support',
+                  'Custom templates',
+                  'API access'
+                ].map((feature, index) => (
+                  <motion.li 
+                    key={index}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex gap-x-3 items-center"
+                  >
+                    <CheckIcon className="h-5 w-5 flex-shrink-0 text-primary-600" />
+                    <span>{feature}</span>
+                  </motion.li>
+                ))}
+              </ul>
+
+              <div className="space-y-4 mt-8">
+                <Button
+                  className="w-full bg-primary-600 hover:bg-primary-700 transition-colors duration-300 h-12 text-base font-medium"
+                  onClick={() => handleUpgrade('monthly')}
+                  disabled={isPro}
+                >
+                  {isPro ? 'Current Plan' : 'Upgrade Monthly'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full hover:bg-primary-50/80 transition-colors duration-300 h-12 text-base border-primary-200"
+                  onClick={() => handleUpgrade('annually')}
+                  disabled={isPro}
+                >
+                  {isPro ? 'Current Plan' : 'Upgrade Annually (Save 20%)'}
+                </Button>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Can I upgrade or downgrade my plan?</h3>
-              <p className="mt-2 text-gray-600">
-                Yes, you can change your plan at any time. When upgrading, you'll be charged the prorated difference for the remainder of your billing cycle. When downgrading, the new plan will take effect at the start of your next billing cycle.
-              </p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">What happens when I reach my word limit?</h3>
-              <p className="mt-2 text-gray-600">
-                Once you reach your daily word limit, you'll need to wait until it resets at midnight UTC or upgrade to a higher plan with a larger word allowance.
-              </p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium text-gray-900">Do you offer refunds?</h3>
-              <p className="mt-2 text-gray-600">
-                We offer a 7-day money-back guarantee for all paid plans. If you're not satisfied with our service, contact our support team within 7 days of your purchase for a full refund.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 };
