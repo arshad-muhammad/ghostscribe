@@ -6,12 +6,11 @@ import type { AuthResponse } from '../types';
 import { useAuthStore } from '../store/authStore';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/Button';
-import { Ghost, Mail, Lock, AlertTriangle } from 'lucide-react';
+import { Ghost, Mail, Lock } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -27,9 +26,10 @@ export const RegisterPage: React.FC = () => {
 
         if (plan === 'pro') {
           try {
-            await createCheckoutSession('pro', billing || 'monthly', response.user.id);
+            await createCheckoutSession('pro', billing || 'monthly');
           } catch (err) {
             console.error('Error creating checkout session:', err);
+            toast.error('Failed to start subscription process. Redirecting to dashboard.');
             navigate('/dashboard');
           }
         } else {
@@ -51,7 +51,7 @@ export const RegisterPage: React.FC = () => {
 
         if (plan === 'pro') {
           try {
-            await createCheckoutSession('pro', billing || 'monthly', response.user.id);
+            await createCheckoutSession('pro', billing || 'monthly');
           } catch (err) {
             console.error('Error creating checkout session:', err);
             navigate('/dashboard');
@@ -80,19 +80,6 @@ export const RegisterPage: React.FC = () => {
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Create your account</h2>
         </div>
-
-        {error && (
-          <div className="rounded-md bg-red-50 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">{error}</h3>
-              </div>
-            </div>
-          </div>
-        )}
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
