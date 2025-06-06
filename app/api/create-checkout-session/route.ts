@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { getAuthHeader } from '../../../lib/headers';
+import { NextResponse } from 'next/server';
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -28,16 +29,19 @@ const verifyUserInDatabase = async (userId: string) => {
   return profile;
 };
 
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Max-Age': '86400'
+};
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-      'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Max-Age': '86400'
-    }
+    headers: corsHeaders
   });
 }
 
@@ -58,40 +62,22 @@ export async function POST(request: Request) {
 
     if (!userId || !priceId || !planType || !billingPeriod) {
       console.error('Missing required fields:', { userId, priceId, planType, billingPeriod });
-      return new Response(
-        JSON.stringify({
+      return NextResponse.json(
+        {
           error: 'Missing required fields',
           received: { userId, priceId, planType, billingPeriod }
-        }),
-        {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
+        },
+        { status: 400, headers: corsHeaders }
       );
     }
 
     // Get the authorization header
-    const authHeader = getAuthHeader();
+    const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       console.error('No authorization header found');
-      return new Response(
-        JSON.stringify({ error: 'No authorization header or invalid header format' }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
+      return NextResponse.json(
+        { error: 'No authorization header or invalid header format' },
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -99,18 +85,9 @@ export async function POST(request: Request) {
     const token = authHeader.split(' ')[1];
     if (!token) {
       console.error('Invalid Authorization header format');
-      return new Response(
-        JSON.stringify({ error: 'Invalid Authorization header format' }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
+      return NextResponse.json(
+        { error: 'Invalid Authorization header format' },
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -119,18 +96,9 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       console.error('Auth error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid token', details: authError?.message }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
+      return NextResponse.json(
+        { error: 'Invalid token', details: authError?.message },
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -160,55 +128,25 @@ export async function POST(request: Request) {
         throw new Error('No checkout URL returned from Stripe');
       }
 
-      return new Response(
-        JSON.stringify({ url: session.url }),
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
-      );
+      return NextResponse.json({ url: session.url }, { headers: corsHeaders });
     } catch (dbError) {
       console.error('Database error:', dbError);
-      return new Response(
-        JSON.stringify({
+      return NextResponse.json(
+        {
           error: 'Database error',
           message: dbError instanceof Error ? dbError.message : 'Unknown database error'
-        }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        }
+        },
+        { status: 500, headers: corsHeaders }
       );
     }
   } catch (error) {
     console.error('Error creating checkout session:', error);
-    return new Response(
-      JSON.stringify({
+    return NextResponse.json(
+      {
         error: 'Failed to create checkout session',
         message: error instanceof Error ? error.message : 'Unknown error'
-      }),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://ghostscribe.xyz',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-          'Access-Control-Allow-Credentials': 'true'
-        }
-      }
+      },
+      { status: 500, headers: corsHeaders }
     );
   }
 } 

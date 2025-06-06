@@ -26,6 +26,18 @@
       }
     },
     {
+      "src": "/api/create-checkout-session",
+      "dest": "/app/api/create-checkout-session",
+      "methods": ["POST", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://ghostscribe.xyz",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400"
+      }
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/app/api/$1",
       "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],

@@ -55,6 +55,7 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`
       },
+      credentials: 'include',
       body: JSON.stringify({
         priceId,
         planType,
