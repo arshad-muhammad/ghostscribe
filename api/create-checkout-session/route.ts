@@ -30,12 +30,13 @@ const verifyUserInDatabase = async (userId: string) => {
 
 export async function POST(request: Request) {
   try {
-    // Verify authentication
+    // Get the authorization header
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return NextResponse.json({ error: 'No authorization header' }, { status: 401 });
     }
 
+    // Verify the token
     const token = authHeader.split(' ')[1];
     const { data: { user }, error } = await supabase.auth.getUser(token);
 

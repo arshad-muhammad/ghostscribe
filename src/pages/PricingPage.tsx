@@ -59,7 +59,11 @@ const PricingPage: React.FC = () => {
     }
 
     try {
-      await createCheckoutSession('pro', billing, user.id);
+      console.log('Starting checkout with user:', {
+        userDetails: user,
+        isAuthenticated,
+      });
+      await createCheckoutSession('pro', billing);
     } catch (error) {
       console.error('Error creating checkout session:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to start subscription process');

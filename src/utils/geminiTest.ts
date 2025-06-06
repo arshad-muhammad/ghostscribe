@@ -1,32 +1,15 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export async function testGeminiAPI(apiKey: string) {
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+export const testGeminiAPI = async () => {
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // Try to list models first
-    console.log('Attempting to list models...');
-    const models = await genAI.listModels();
-    console.log('Available models:', models);
-    
-    // Try the simplest possible generation
-    console.log('Attempting to generate content...');
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const result = await model.generateContent("Hello, can you hear me?");
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const result = await model.generateContent('Hello, how are you?');
     const response = await result.response;
-    const text = response.text();
-    
-    console.log('Generated text:', text);
-    return {
-      success: true,
-      models,
-      sampleText: text
-    };
+    return response.text();
   } catch (error) {
-    console.error('Gemini API test failed:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    console.error('Error testing Gemini API:', error);
+    throw error;
   }
-} 
+}; 

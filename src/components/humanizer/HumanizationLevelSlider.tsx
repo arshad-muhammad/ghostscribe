@@ -1,5 +1,5 @@
 import React from 'react';
-import { HumanizationLevel } from '../../types';
+import { HumanizationLevel, HumanizationLevelValue } from '../../types';
 import { useHumanizeStore } from '../../store/humanizeStore';
 
 export const HumanizationLevelSlider: React.FC = () => {
@@ -10,17 +10,15 @@ export const HumanizationLevelSlider: React.FC = () => {
     setLevel(newLevel);
   };
 
-  const getLevelDescription = (level: HumanizationLevel): string => {
-    if (level <= 3) return 'Light rewording while keeping structure similar';
-    if (level <= 6) return 'Moderate restructuring with some variations';
-    if (level <= 8) return 'Significant rewriting with natural human patterns';
-    return 'Maximum humanization with deep restructuring';
+  const getLevelDescription = (level: HumanizationLevelValue): string => {
+    if (level <= 3) return 'Conservative humanization - subtle changes';
+    if (level <= 7) return 'Balanced humanization - moderate changes';
+    return 'Aggressive humanization - significant changes';
   };
 
-  const getLevelColor = (level: HumanizationLevel): string => {
+  const getLevelColor = (level: HumanizationLevelValue): string => {
     if (level <= 3) return 'text-green-500';
-    if (level <= 6) return 'text-blue-500';
-    if (level <= 8) return 'text-purple-500';
+    if (level <= 7) return 'text-yellow-500';
     return 'text-red-500';
   };
 

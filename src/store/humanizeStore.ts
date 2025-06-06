@@ -208,7 +208,8 @@ export const useHumanizeStore = create<HumanizeState>((set, get) => ({
           humanizedText,
           model: modelType,
           level,
-          language
+          language,
+          wordCount: originalText.split(/\s+/).length
         });
 
       } catch (apiError: unknown) {
@@ -612,7 +613,8 @@ function calculateReadabilityScore(text: string): number {
 function countSyllables(text: string): number {
   const words = text.toLowerCase().split(/\s+/);
   return words.reduce((count, word) => {
-    return count + word.match(/[aeiouy]+/g)?.length || 1;
+    const matches = word.match(/[aeiouy]+/g);
+    return count + (matches ? matches.length : 1);
   }, 0);
 }
 

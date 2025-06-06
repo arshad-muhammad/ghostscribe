@@ -65,7 +65,10 @@ export const signUp = async (email: string, password: string) => {
       .select()
       .single();
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      console.warn('Profile creation error (may be due to trigger):', profileError);
+      // Don't throw here, as the trigger might have already created the profile
+    }
   }
 
   return data;
@@ -106,35 +109,51 @@ export const getCurrentUser = async () => {
 
 // Profile management
 export const getUserProfile = async (userId: string): Promise<UserProfile> => {
-  const { data, error } = await supabase
+  // First try to get the existing profile
+  const { data: existingProfile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
     .single();
 
-  if (error) {
-    // If profile doesn't exist, create it
-    if (error.code === 'PGRST116') {
-      const user = await getCurrentUser();
-      if (!user) throw new Error('No authenticated user');
-
-      const { data: newProfile, error: createError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email,
-          plan: 'free',
-          words_remaining: 2000
-        })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-      return newProfile;
-    }
-    throw error;
+  if (existingProfile) {
+    return existingProfile;
   }
-  return data;
+
+  // If no profile exists, get the user and create one
+  const user = await getCurrentUser();
+  if (!user) throw new Error('No authenticated user');
+
+  // Try to create the profile
+  const { data: newProfile, error: createError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      email: user.email,
+      plan: 'free',
+      words_remaining: 2000,
+      subscription_status: 'inactive'
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    // If creation failed, try one more time to get the profile
+    // (in case it was created by the trigger in the meantime)
+    const { data: retryProfile, error: retryError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (retryError || !retryProfile) {
+      throw new Error('Failed to create or retrieve user profile');
+    }
+
+    return retryProfile;
+  }
+
+  return newProfile;
 };
 
 export const updateUserProfile = async (userId: string, updates: Partial<UserProfile>) => {

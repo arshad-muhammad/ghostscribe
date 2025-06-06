@@ -1,3 +1,5 @@
+import type { LucideIcon } from 'lucide-react';
+
 export type PlanType = 'free' | 'pro';
 
 export interface PlanFeatures {
@@ -63,6 +65,7 @@ export type HistoryItem = {
   level: HumanizationLevelValue;
   language: SupportedLanguage;
   detectionScore?: AIDetectionScore;
+  wordCount: number;
 };
 
 // AI Detection Service Response Types
@@ -89,7 +92,7 @@ export interface GPTZeroResponse {
 export interface FeatureType {
   title: string;
   description: string;
-  icon: React.ComponentType;
+  icon: LucideIcon;
   available: boolean;
 }
 
@@ -99,4 +102,19 @@ export interface TestimonialType {
   role: string;
   content: string;
   avatar: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  plan: PlanType;
+}
+
+export interface AuthResponse {
+  user: {
+    id: string;
+    email: string;
+    name?: string;
+  };
 } 

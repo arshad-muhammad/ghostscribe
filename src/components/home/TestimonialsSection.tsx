@@ -36,14 +36,12 @@ export const TestimonialsSection: React.FC = () => {
               >
                 <div className="flex items-center mb-6">
                   <img 
-                    src={testimonial.avatarUrl}
+                    className="h-10 w-10 rounded-full bg-gray-50"
+                    src={testimonial.avatar}
                     alt={testimonial.name}
-                    className="h-12 w-12 rounded-full mr-4"
                   />
-                  <div>
-                    <h4 className="text-lg font-bold text-gray-900">{testimonial.name}</h4>
-                    <p className="text-sm text-gray-500">{testimonial.role} at {testimonial.company}</p>
-                  </div>
+                  <div className="font-semibold text-gray-900">{testimonial.name}</div>
+                  <p className="text-sm text-gray-500">{testimonial.role}</p>
                 </div>
                 <blockquote>
                   <p className="text-gray-700 italic">"{testimonial.content}"</p>

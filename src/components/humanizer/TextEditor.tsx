@@ -53,7 +53,8 @@ export const TextEditor: React.FC = () => {
         humanizedText,
         model: useHumanizeStore.getState().model,
         level: useHumanizeStore.getState().level,
-        wordCount
+        wordCount,
+        language: 'english' // Default to English
       });
     } catch (err) {
       setError((err as Error).message);

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
+import { getAuthHeader } from '../../../lib/headers';
+import { cors } from '../../../lib/cors';
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -13,20 +15,39 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_ANON_KEY!
 );
 
-export async function POST(request: Request) {
+export async function OPTIONS() {
+  return cors(
+    new Response(null, {
+      status: 204,
+    })
+  );
+}
+
+export async function POST() {
   try {
     // Get the authorization header
-    const authHeader = request.headers.get('authorization');
+    const authHeader = getAuthHeader();
     if (!authHeader) {
-      return NextResponse.json({ error: 'No authorization header' }, { status: 401 });
+      return cors(
+        NextResponse.json({ error: 'No authorization header or invalid header format' }, { status: 401 })
+      );
+    }
+
+    // Extract token from Authorization header
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return cors(
+        NextResponse.json({ error: 'Invalid Authorization header format' }, { status: 401 })
+      );
     }
 
     // Verify the token
-    const token = authHeader.split(' ')[1];
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      return cors(
+        NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      );
     }
 
     // Get the user's current subscription from Supabase
@@ -37,10 +58,12 @@ export async function POST(request: Request) {
       .single();
 
     if (profileError || !profile?.subscription_id) {
-      return NextResponse.json({ 
-        error: 'No active subscription found',
-        details: 'User does not have an active subscription'
-      }, { status: 400 });
+      return cors(
+        NextResponse.json({ 
+          error: 'No active subscription found',
+          details: 'User does not have an active subscription'
+        }, { status: 400 })
+      );
     }
 
     // Cancel the subscription in Stripe
@@ -61,12 +84,16 @@ export async function POST(request: Request) {
       throw updateError;
     }
 
-    return NextResponse.json({ success: true });
+    return cors(
+      NextResponse.json({ success: true }, { status: 200 })
+    );
   } catch (error) {
     console.error('Error canceling subscription:', error);
-    return NextResponse.json({
-      error: 'Failed to cancel subscription',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return cors(
+      NextResponse.json({
+        error: 'Failed to cancel subscription',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 })
+    );
   }
 } 

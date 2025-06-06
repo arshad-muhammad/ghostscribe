@@ -1,20 +1,22 @@
 import { PlanType } from '../types';
 import { pricingPlans } from '../data/pricing';
 import { supabase } from './supabase';
+import { API_URL } from './config';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Get the price ID based on the plan type and billing period
+const getPriceId = (planType: PlanType, billingPeriod: 'monthly' | 'annually'): string => {
+  const plan = pricingPlans.find(p => p.type === planType);
+  if (!plan) throw new Error('Invalid plan type');
 
-// Validate price ID format
-const validatePriceId = (priceId: string) => {
-  if (!priceId.startsWith('price_')) {
-    throw new Error(`Invalid price ID format: ${priceId}. Must start with "price_"`);
-  }
+  const priceId = billingPeriod === 'monthly' ? plan.stripePriceId.monthly : plan.stripePriceId.annually;
+  if (!priceId) throw new Error(`No price ID found for ${planType} plan (${billingPeriod})`);
+
   return priceId;
 };
 
-export const createCheckoutSession = async (planType: PlanType, billingPeriod: 'monthly' | 'annually', userId: string) => {
+export const createCheckoutSession = async (planType: PlanType, billingPeriod: 'monthly' | 'annually') => {
   try {
-    // First verify we have a valid session
+    // First verify we have a valid session and get the current user
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError) {
@@ -27,30 +29,26 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
       throw new Error('No active session found. Please log in again.');
     }
 
-    // Then get the plan and price ID
-    const plan = pricingPlans.find(p => p.type === planType);
-    if (!plan) throw new Error('Invalid plan type');
-
-    const priceId = billingPeriod === 'monthly' ? plan.stripePriceId.monthly : plan.stripePriceId.annually;
+    // Get the current user to ensure we have the correct ID
+    const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser(session.access_token);
     
-    // Validate price ID
-    try {
-      validatePriceId(priceId);
-    } catch (error) {
-      console.error('Price ID validation failed:', error);
-      throw new Error(`Invalid price ID for ${planType} plan (${billingPeriod}). Please check your environment variables.`);
+    if (userError || !currentUser) {
+      console.error('User error:', userError);
+      throw new Error('Could not verify user identity');
     }
 
+    // Get the price ID based on the plan type and billing period
+    const priceId = getPriceId(planType, billingPeriod);
+    
     console.log('Creating checkout session with:', {
       planType,
       billingPeriod,
       priceId,
-      userId,
-      hasToken: true,
-      tokenPreview: session.access_token.substring(0, 20) + '...'
+      userId: currentUser.id,
+      hasToken: !!session.access_token
     });
 
-    // Make the API request
+    // Make the API request with the auth token
     const response = await fetch(`${API_URL}/api/create-checkout-session`, {
       method: 'POST',
       headers: {
@@ -61,64 +59,26 @@ export const createCheckoutSession = async (planType: PlanType, billingPeriod: '
         priceId,
         planType,
         billingPeriod,
-        userId,
-      }),
+        userId: currentUser.id
+      })
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
+      const errorData = await response.json().catch(() => ({}));
       console.error('Checkout session error:', {
         status: response.status,
         statusText: response.statusText,
         errorData,
         requestDetails: {
-          url: `${API_URL}/api/create-checkout-session`,
-          hasToken: !!session.access_token,
-          userId,
-          priceId
+          url: response.url,
+          headers: Object.fromEntries(response.headers.entries())
         }
       });
-      
-      if (response.status === 401) {
-        // Try to refresh the session
-        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-        if (refreshError || !refreshData.session) {
-          throw new Error('Session expired. Please log in again.');
-        }
-        
-        // Retry with new token
-        const retryResponse = await fetch(`${API_URL}/api/create-checkout-session`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${refreshData.session.access_token}`
-          },
-          body: JSON.stringify({
-            priceId,
-            planType,
-            billingPeriod,
-            userId,
-          }),
-        });
-
-        if (!retryResponse.ok) {
-          const retryErrorData = await retryResponse.json().catch(() => null);
-          throw new Error(retryErrorData?.error || `Failed to create checkout session: ${retryResponse.status}`);
-        }
-
-        const { url } = await retryResponse.json();
-        if (!url) throw new Error('No checkout URL returned from server');
-        window.location.href = url;
-        return;
-      }
-
-      throw new Error(errorData?.error || `Failed to create checkout session: ${response.status}`);
+      throw new Error(errorData.error || 'Failed to create checkout session');
     }
 
     const { url } = await response.json();
-    if (!url) {
-      throw new Error('No checkout URL returned from server');
-    }
+    if (!url) throw new Error('No checkout URL returned');
 
     // Redirect to Stripe Checkout
     window.location.href = url;
@@ -141,7 +101,8 @@ export const cancelSubscription = async () => {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`
-      }
+      },
+      credentials: 'include'
     });
 
     const data = await response.json();
