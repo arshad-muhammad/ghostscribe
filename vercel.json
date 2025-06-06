@@ -1,18 +1,44 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": "dist",
   "builds": [
     {
-      "src": "api/server.ts",
+      "src": "app/api/**/*.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
   ],
   "routes": [
     {
+      "src": "/api/webhook",
+      "dest": "/app/api/webhook",
+      "methods": ["POST", "OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://ghostscribe.xyz",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, stripe-signature",
+        "Access-Control-Max-Age": "86400"
+      }
+    },
+    {
       "src": "/api/(.*)",
-      "dest": "/api/server.ts"
+      "dest": "/app/api/$1",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://ghostscribe.xyz",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Allow-Credentials": "true"
+      }
+    },
+    {
+      "src": "^/assets/(.*)",
+      "dest": "/assets/$1"
     },
     {
       "handle": "filesystem"
@@ -21,5 +47,9 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "VITE_APP_URL": "https://ghostscribe.xyz",
+    "VITE_API_URL": "https://ghostscribe.xyz"
+  }
 }

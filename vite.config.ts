@@ -1,32 +1,22 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './',
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  },
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
-    minify: 'terser',
-    sourcemap: false,
+    assetsDir: 'assets',
+    sourcemap: true,
     rollupOptions: {
-      output: {
-        manualChunks: undefined,
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: 'assets/[name].[hash].[ext]'
-      }
-    }
+      input: {
+        main: resolve(__dirname, 'index.html'),
+      },
+    },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom']
+    exclude: ['lucide-react'],
   },
   define: {
     // Make env variables available at runtime

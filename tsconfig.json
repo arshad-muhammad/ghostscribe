@@ -16,13 +16,13 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "allowJs": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["vite/client", "node"],
+    "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
-    }
+      "@/*": ["src/*"]
+    },
+    "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "app/**/*"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -37,7 +37,7 @@ const app = express();
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16'
+  apiVersion: '2025-05-28.basil' as const,
 });
 
 // Initialize Supabase
@@ -58,20 +58,16 @@ const supabaseAuth = createClient(
   process.env.VITE_SUPABASE_ANON_KEY!
 );
 
-// CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://ghostscribe.vercel.app', 'https://ghostscribe.xyz']
+// Middleware
+app.use(express.json());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://ghostscribe.xyz']
     : ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
-
-// Middleware
-app.use(express.json());
+}));
 
 // Basic authentication middleware
 const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -150,7 +146,11 @@ const router = express.Router();
 
 // Health check endpoint
 router.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+  res.json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
 });
 
 // Create checkout session endpoint
@@ -297,10 +297,10 @@ app.use('/api', router);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Server error:', err);
+  console.error('Error:', err);
   res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    error: err.message || 'Internal Server Error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 });
 
@@ -309,14 +309,17 @@ app.use((req: express.Request, res: express.Response) => {
   res.status(404).json({ error: 'Not Found', path: req.path });
 });
 
-// Start the server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`
+// Export the Express app
+export default app;
+
+// Start the server if we're not in production (Vercel will handle this in production)
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`
     🚀 Server is running!
     ⭐️ NODE_ENV: ${process.env.NODE_ENV}
-    🔗 API URL: ${process.env.NODE_ENV === 'production' 
-      ? 'https://ghostscribe.vercel.app' 
-      : `http://localhost:${port}`}
-  `);
-}); 
+    🔗 API URL: http://localhost:${PORT}
+    `);
+  });
+} 
