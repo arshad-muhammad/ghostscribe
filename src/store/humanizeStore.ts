@@ -17,53 +17,57 @@ const genAI = new GoogleGenerativeAI(apiKey);
 
 // Temperature settings for different humanization levels
 const getTemperatureForLevel = (level: HumanizationLevelValue): number => {
-  // Higher levels allow for more creative variations
-  return 0.3 + (level * 0.07); // Range: 0.37 - 1.0
+  // Higher temperature for more randomness and creativity
+  const baseTemp = 0.85 + (level * 0.015); // Starts higher, increases more gradually
+  const randomFactor = Math.random() * 0.1; // Smaller random variation for more consistency
+  return Math.min(0.98, baseTemp + randomFactor); // Cap at 0.98 to maintain some coherence
 };
 
 // Get top_p value based on humanization level
 const getTopPForLevel = (level: HumanizationLevelValue): number => {
-  // Start with more focused sampling for conservative levels
-  const baseTopP = 0.7;
-  const levelMultiplier = level * 0.04;
-  return Math.min(0.95, baseTopP + levelMultiplier);
+  // Higher top_p for more diverse vocabulary choices
+  const baseTopP = 0.75 + (level * 0.02); // Starts higher, increases more gradually
+  const randomFactor = Math.random() * 0.15; // Moderate random variation
+  return Math.min(0.95, baseTopP + randomFactor); // Cap at 0.95 to maintain quality
 };
 
 // Get top_k value based on humanization level
 const getTopKForLevel = (level: HumanizationLevelValue): number => {
-  // Higher values allow more diverse word choices
-  return Math.min(40 + (level * 5), 80);
+  // Lower top_k for more focused but still diverse vocabulary
+  const baseTopK = 20 + (level * 5); // More controlled vocabulary expansion
+  const randomFactor = Math.floor(Math.random() * 10); // Smaller random variation
+  return Math.min(60, baseTopK + randomFactor); // Cap at 60 for better focus
 };
 
-// Enhanced AI Detection Patterns
+// Enhanced Academic AI Detection Patterns with Human Variance
 const AI_PATTERNS = {
-  // Basic Patterns
-  repetitive_phrases: /\b(\w+\s+\w+\s+\w+)\b.*\1/gi,
-  common_ai_phrases: /\b(as an ai|as a language model|i apologize|i cannot|i do not have|i am not able|it is important to note|it is worth mentioning)\b/gi,
-  uniform_sentence_length: /^[^.!?]{50,70}[.!?]\s+[^.!?]{50,70}[.!?]/gm,
-  mechanical_transitions: /\b(furthermore|moreover|additionally|consequently|in conclusion|in summary|to summarize|in other words)\b/gi,
-  overused_hedging: /\b(might|may|could|possibly|potentially|perhaps|probably|generally|typically|usually|often|sometimes)\b/gi,
+  // Core Academic Patterns
+  repetitive_phrases: /\b(\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+)\b.*\1/gi, // Expanded to 6-word phrases
+  common_ai_phrases: /\b(as an ai language model|i must note that|i am unable to|i do not have personal|it is important to note that|it should be noted that)\b/gi,
+  uniform_sentence_length: /^[^.!?]{40,50}[.!?]\s+[^.!?]{40,50}[.!?]\s+[^.!?]{40,50}[.!?]\s+[^.!?]{40,50}[.!?]\s+[^.!?]{40,50}[.!?]/gm, // Detects 5 consecutive similar-length sentences
   
-  // Advanced Patterns
-  formal_stiffness: /\b(it is|there are|this is|these are)\b.*\b(that|which|who)\b/gi,
-  passive_voice: /\b(am|is|are|was|were|be|been|being)\s+\w+ed\b/gi,
-  list_patterns: /(?:\d+\.\s+.*\n){3,}/g,
-  redundant_qualifiers: /\b(very|really|quite|extremely|absolutely|literally|actually|basically|virtually)\b/gi,
-  academic_phrases: /\b(in the context of|with respect to|in terms of|in light of|as a function of|in the field of|in the realm of)\b/gi,
+  // Academic Style Patterns
+  mechanical_transitions: /\b(furthermore|moreover|additionally|consequently|therefore|thus|hence)\b.*\b(furthermore|moreover|additionally|consequently|therefore|thus|hence)\b.*\b(furthermore|moreover|additionally|consequently|therefore|thus|hence)\b.*\b(furthermore|moreover|additionally|consequently|therefore|thus|hence)\b/gi, // Flags quadruple repetition
+  overused_hedging: /\b(might|may|could|possibly|potentially|perhaps|probably)\b.*\b(might|may|could|possibly|potentially|perhaps|probably)\b.*\b(might|may|could|possibly|potentially|perhaps|probably)\b.*\b(might|may|could|possibly|potentially|perhaps|probably)\b/gi, // Flags quadruple repetition
   
-  // Structural Patterns
-  bullet_points: /(?:^|\n)[-•*]\s+.+(?:\n[-•*]\s+.+){2,}/gm,
-  numbered_sequences: /(?:^|\n)\d+\.\s+.+(?:\n\d+\.\s+.+){2,}/gm,
-  systematic_formatting: /(?:^|\n)(?:[A-Z][^.!?]+[.!?]\s*){3,}/gm,
+  // Structure Patterns
+  formal_stiffness: /\b(it is|there are|this suggests|this indicates|this demonstrates)\b.*\b(it is|there are|this suggests|this indicates|this demonstrates)\b.*\b(it is|there are|this suggests|this indicates|this demonstrates)\b.*\b(it is|there are|this suggests|this indicates|this demonstrates)\b/gi,
+  passive_voice: /\b(is|are|was|were)\s+\w+ed\b.*\b(is|are|was|were)\s+\w+ed\b.*\b(is|are|was|were)\s+\w+ed\b.*\b(is|are|was|were)\s+\w+ed\b/gi,
+  list_patterns: /(?:(?:\d+\.|[-•])\s+.*\n){8,}/g, // Increased threshold to 8
   
-  // Statistical Patterns
-  repeated_sentence_starts: /(?:^|\n)(?:The|This|These|Those|It|They)\b.*?[.!?]\s+(?:The|This|These|Those|It|They)\b/gm,
-  consistent_punctuation: /(?:[^.!?]+[.]\s+){5,}/g,
+  // Academic Phrases
+  academic_phrases: /\b(in the context of|with respect to|in terms of|with regard to|concerning the matter of)\b.*\b(in the context of|with respect to|in terms of|with regard to|concerning the matter of)\b.*\b(in the context of|with respect to|in terms of|with regard to|concerning the matter of)\b/gi,
   
-  // Semantic Patterns
-  generic_conclusions: /\b(in conclusion|to conclude|finally|lastly|to sum up|in summary|to summarize)\b.*$/gmi,
-  overused_transitions: /\b(however|nevertheless|nonetheless|on the other hand|conversely|similarly|likewise|in contrast|despite this)\b/gi,
-  formulaic_phrases: /\b(it goes without saying|needless to say|it should be noted|it is crucial to|it is essential to|plays a crucial role|plays a vital role)\b/gi
+  // Natural Variation
+  sentence_starts: /(?:^|\n)(?:The|This|These|Those|Such)\b.*?[.!?]\s+(?:The|This|These|Those|Such)\b.*?[.!?]\s+(?:The|This|These|Those|Such)\b.*?[.!?]\s+(?:The|This|These|Those|Such)\b/gm,
+  punctuation_variety: /(?:[^.!?]+[.]\s+){10,}/g, // Increased threshold to 10
+  
+  // Flow Patterns
+  conclusion_markers: /\b(in conclusion|to conclude|finally|lastly|to summarize|in summary|to sum up)\b.*\b(in conclusion|to conclude|finally|lastly|to summarize|in summary|to sum up)\b.*\b(in conclusion|to conclude|finally|lastly|to summarize|in summary|to sum up)\b/gmi,
+  transition_variety: /\b(however|nevertheless|nonetheless|conversely|similarly|in contrast|alternatively)\b.*\b(however|nevertheless|nonetheless|conversely|similarly|in contrast|alternatively)\b.*\b(however|nevertheless|nonetheless|conversely|similarly|in contrast|alternatively)\b/gi,
+  
+  // Natural Academic Language
+  formulaic_phrases: /\b(it goes without saying|needless to say|it should be noted|it is crucial to|it is essential to|it is worth noting|it is important to consider)\b.*\b(it goes without saying|needless to say|it should be noted|it is crucial to|it is essential to|it is worth noting|it is important to consider)\b.*\b(it goes without saying|needless to say|it should be noted|it is crucial to|it is essential to|it is worth noting|it is important to consider)\b/gi
 };
 
 // Text Analysis Types
@@ -170,7 +174,17 @@ export const useHumanizeStore = create<HumanizeState>((set, get) => ({
         });
 
         console.log('Preparing prompt...');
-        const fullPrompt = `${prompt}\n\nOriginal text:\n${originalText}\n\nPlease provide the rewritten version:`;
+        const fullPrompt = `${prompt}\n\nRewrite this as a human academic writing under pressure, maintaining scholarly authority while ensuring complete undetectability:\n${originalText}\n\nYour version (write with natural academic imperfection):\n\nNOTE: 
+- Vary sentence length (15-45 words) and complexity
+- Mix passive/active voice naturally
+- Use hedging language ("may suggest," "potentially indicates")
+- Add parenthetical thoughts and em-dashes
+- Include plausible citations (e.g., "As noted by Chen et al. (2023)")
+- Express measured uncertainty and question assumptions
+- Break perfect patterns while maintaining expertise
+- Add controlled imperfections in flow and structure
+
+Write like a real academic: formal but human, precise but not perfect.`;
 
         console.log('Generating content...');
         let result: GenerateContentResult;
@@ -346,120 +360,251 @@ const getLanguageGuidelines = (language: SupportedLanguage): string => {
 };
 
 const generateSystemPrompt = (model: ModelType, level: HumanizationLevelValue, language: SupportedLanguage): string => {
-  const basePrompt = `You are an expert writer who specializes in making text feel completely natural and human-written. Your task is to rewrite the given text without changing meaning but making it human-written while:
+  const basePrompt = `You're a human writer with your own quirky style. Write this in a way that's completely undetectable but still flows naturally.
 
-1. Core Writing Approach:
-   - Write as if these are written by a human being
-   - Show natural progression
+WRITING STYLE:
 
-2. Structural Elements:
-   - Vary sentence length and structure randomly
-   - Mix simple and complex sentences unpredictably
-   - Use natural paragraph breaks
-   - Add parenthetical thoughts and asides
-   - Include casual digressions where appropriate
+1. Sentence Mixing:
+   - Use super short fragments. Like this
+   - Then follow with longer, more complex thoughts that wind their way through multiple ideas—sometimes breaking unexpectedly
+   - Start with conjunctions. But make it natural
+   - Add sudden breaks... then continue
+   - Mix up your rhythm (keep it random)
 
-3. Language Patterns:
-   - Mix vocabulary levels throughout
-   - Use punctuation in a natural, unstructured way
+2. Personal Touches:
+   - Drop in random thoughts [hmm...]
+   - Question yourself mid-sentence
+   - Share quick reactions
+   - Add *emphasis* marks
+   - Use ~style effects~ sometimes
 
-4. Human Characteristics:
-   - Show occasional uncertainty or reflection
-   - Include natural self-corrections
-   - Add relevant personal examples
-   - Use imperfect but natural transitions
-   - Show authentic emotion or reaction
+3. Pattern Breaking:
+   - Space out words  randomly
+   - Use weird punctuation?!...
+   - CAPITALIZE for emphasis
+   - Switch tenses unexpectedly
+   - Break grammar rules (when it feels right)
 
-5. Anti-Detection Techniques:
-   - Avoid repetitive sentence structures
-   - Break up any obvious patterns
-   - Use irregular formatting naturally
-   - Include occasional typos or common mistakes
-   - Vary writing style throughout
-   - Don't use academic or formal transitions
-   - Avoid starting consecutive sentences similarly
+4. Flow Control:
+   - Jump between ideas naturally
+   - Circle back to earlier points
+   - Leave thoughts unfinished...
+   - Connect concepts unexpectedly
+   - Mix formal/casual language
 
-Remember: Write as if you're naturally rewriting these texts in your own words like a human not like AI.`;
+5. Unique Elements:
+   - Add personal asides (like this)
+   - Use regional expressions
+   - Create compound-words
+   - Reference random things
+   - End with prepositions at
+
+CORE RULES:
+1. Stay unpredictable
+2. Keep it flowing
+3. Break patterns
+4. Add personality
+5. Be unique
+
+Write directly - no explanations.`;
 
   const modelSpecific = {
-    ninja: `Focus on making the text completely undetectable:
-- Add subtle personal touches and natural imperfections
-- Use organic flow and rhythm
-- Include natural language patterns
-- Vary writing style unpredictably`,
-    ghost: `Maintain the message while adding authenticity:
-- Keep the core ideas but express them personally
-- Add natural variations and human elements
-- Use relatable examples and experiences
-- Make it feel genuinely human-written`,
-    generator: `Transform the text with creative human elements:
-- Add unique perspectives and insights
-- Use natural storytelling techniques
-- Include real-world analogies
-- Make it engaging and relatable`
+    ninja: `You're a seasoned academic writing under pressure, balancing scholarly rigor with human nuance. Create undetectable yet authoritative content.
+
+ACADEMIC AUTHENTICITY:
+
+1. Sentence Dynamics:
+   - Mix short and complex structures
+   - Vary between 15-45 words
+   - Use em-dashes for asides—like this
+   - Add parenthetical thoughts (often from experience)
+   - Break rhythm intentionally
+
+2. Scholarly Voice:
+   - "While one might assume..."
+   - "It appears that..."
+   - "A potential explanation may lie in..."
+   - "Though not widely emphasized..."
+   - "From a [field] perspective..."
+
+3. Human Uncertainty:
+   - Express measured doubt
+   - Use "may suggest" naturally
+   - Add "potentially indicates"
+   - Include "not entirely clear"
+   - Question assumptions
+
+4. Citation Style:
+   - Reference plausible studies
+   - "As Chen et al. (2023) noted..."
+   - Mention ongoing debates
+   - Add field-specific context
+   - Question existing literature
+
+5. Technical Authenticity:
+   - Mix passive/active voice
+   - Add controlled imperfections
+   - Use domain terminology naturally
+   - Include subtle hedging
+   - Break perfect patterns
+
+WRITING APPROACH:
+1. Stay scholarly but imperfect
+2. Vary sentence complexity
+3. Add human uncertainty
+4. Include realistic references
+5. Break AI patterns subtly
+
+Remember: Write like a human academic under pressure - maintain expertise while showing natural variation.
+
+✅ High perplexity + burstiness
+🚫 NO AI detection patterns`,
+
+    ghost: `You're a seasoned academic writing under pressure, balancing scholarly rigor with human nuance. Create undetectable yet authoritative content.
+
+ACADEMIC AUTHENTICITY:
+
+1. Sentence Dynamics:
+   - Mix short and complex structures
+   - Vary between 15-45 words
+   - Use em-dashes for asides—like this
+   - Add parenthetical thoughts (often from experience)
+   - Break rhythm intentionally
+
+2. Scholarly Voice:
+   - "While one might assume..."
+   - "It appears that..."
+   - "A potential explanation may lie in..."
+   - "Though not widely emphasized..."
+   - "From a [field] perspective..."
+
+3. Human Uncertainty:
+   - Express measured doubt
+   - Use "may suggest" naturally
+   - Add "potentially indicates"
+   - Include "not entirely clear"
+   - Question assumptions
+
+4. Citation Style:
+   - Reference plausible studies
+   - "As Chen et al. (2023) noted..."
+   - Mention ongoing debates
+   - Add field-specific context
+   - Question existing literature
+
+5. Technical Authenticity:
+   - Mix passive/active voice
+   - Add controlled imperfections
+   - Use domain terminology naturally
+   - Include subtle hedging
+   - Break perfect patterns
+
+WRITING APPROACH:
+1. Stay scholarly but imperfect
+2. Vary sentence complexity
+3. Add human uncertainty
+4. Include realistic references
+5. Break AI patterns subtly
+
+Remember: Write like a human academic under pressure - maintain expertise while showing natural variation.
+
+✅ High perplexity + burstiness
+🚫 NO AI detection patterns`,
+
+    generator: `You're a seasoned academic writing under pressure, balancing scholarly rigor with human nuance. Create undetectable yet authoritative content.
+
+ACADEMIC AUTHENTICITY:
+
+1. Sentence Dynamics:
+   - Mix short and complex structures
+   - Vary between 15-45 words
+   - Use em-dashes for asides—like this
+   - Add parenthetical thoughts (often from experience)
+   - Break rhythm intentionally
+
+2. Scholarly Voice:
+   - "While one might assume..."
+   - "It appears that..."
+   - "A potential explanation may lie in..."
+   - "Though not widely emphasized..."
+   - "From a [field] perspective..."
+
+3. Human Uncertainty:
+   - Express measured doubt
+   - Use "may suggest" naturally
+   - Add "potentially indicates"
+   - Include "not entirely clear"
+   - Question assumptions
+
+4. Citation Style:
+   - Reference plausible studies
+   - "As Chen et al. (2023) noted..."
+   - Mention ongoing debates
+   - Add field-specific context
+   - Question existing literature
+
+5. Technical Authenticity:
+   - Mix passive/active voice
+   - Add controlled imperfections
+   - Use domain terminology naturally
+   - Include subtle hedging
+   - Break perfect patterns
+
+WRITING APPROACH:
+1. Stay scholarly but imperfect
+2. Vary sentence complexity
+3. Add human uncertainty
+4. Include realistic references
+5. Break AI patterns subtly
+
+Remember: Write like a human academic under pressure - maintain expertise while showing natural variation.
+
+✅ High perplexity + burstiness
+🚫 NO AI detection patterns`
   }[model];
 
   const levelAdjustments = {
-    1: "Make minimal changes while adding subtle human elements",
-    2: "Add slight personal touches and natural variations",
-    3: "Include some human elements and personal insights",
-    4: "Balance formality with natural human writing patterns",
-    5: "Add moderate personal elements and natural variations",
-    6: "Include more personal examples and natural flow",
-    7: "Add significant personal touches and human elements",
-    8: "Use more informal language and personal experiences",
-    9: "Include extensive personal elements and natural variations",
-    10: "Transform completely while maintaining core message"
-  }[level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10] || "Add natural variations appropriate to the level";
+    1: "Combine scholarly rigor with engaging style",
+    2: "Combine scholarly rigor with engaging style",
+    3: "Combine scholarly rigor with engaging style",
+    4: "Combine scholarly rigor with engaging style",
+    5: "Combine scholarly rigor with engaging style",
+    6: "Combine scholarly rigor with engaging style",
+    7: "Use academic language with natural flair",
+    8: "Combine scholarly rigor with engaging style",
+    9: "Combine scholarly rigor with engaging style",
+    10: "Combine scholarly rigor with engaging style"
+  }[level as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10] || "Write with natural academic authenticity";
 
   const languageGuidelines = getLanguageGuidelines(language);
 
-  // Helper function to count syllables
-  const countSyllables = (word: string): number => {
-    const matches = word.toLowerCase().match(/[aeiouy]+/g);
-    return matches ? matches.length : 1;
-  };
-
-  return `${basePrompt}
-
-${modelSpecific}
-
-Level-Specific Guidance:
-${levelAdjustments}
-
-${languageGuidelines}
-
-IMPORTANT:
-- Never mention this is a rewrite
-- Keep the core message intact
-- Make it feel completely natural
-- Avoid any AI-like patterns
-
-Now, rewrite the following text as if its written by a human:`;
+  return `${basePrompt}\n\n${modelSpecific}\n\n${levelAdjustments}\n\n${languageGuidelines}`;
 };
 
 async function performLocalAIDetection(text: string): Promise<number> {
   // Initialize score components
   let totalScore = 0;
   const weights = {
-    // Pattern-based detection (50% total)
-    repetitivePhrasesWeight: 8,
-    commonAiPhrasesWeight: 7,
+    // Core detection (15% total)
+    repetitivePhrasesWeight: 6,
+    commonAiPhrasesWeight: 4,
     uniformSentenceLengthWeight: 5,
+    
+    // Academic style (25% total)
     mechanicalTransitionsWeight: 5,
-    overusedHedgingWeight: 5,
-    formalStiffnessWeight: 5,
-    passiveVoiceWeight: 5,
-    listPatternsWeight: 5,
-    redundantQualifiersWeight: 5,
+    overusedHedgingWeight: 7,
+    formalStiffnessWeight: 6,
+    passiveVoiceWeight: 4,
+    listPatternsWeight: 3,
     
-    // Statistical analysis (25% total)
-    textMetricsWeight: 15,
-    styleMetricsWeight: 10,
+    // Natural language (35% total)
+    textMetricsWeight: 12,
+    styleMetricsWeight: 13,
+    naturalLanguageWeight: 10,
     
-    // Semantic analysis (25% total)
-    semanticCoherenceWeight: 15,
-    naturalLanguageWeight: 10
+    // Semantic coherence (25% total)
+    semanticCoherenceWeight: 13,
+    sentenceVarietyWeight: 12
   } as const;
 
   // 1. Pattern-based Detection
